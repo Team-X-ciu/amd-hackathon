@@ -55,7 +55,11 @@ docs/         Plan, tasks, decisions
 
 ## Quick start
 
-Requires Docker and Docker Compose. Python dependencies use [uv](https://docs.astral.sh/uv/).
+New to the repo? Start with [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md): installing the tools, setup, and first steps for each role.
+Before your first pull request, read [`CONTRIBUTING.md`](CONTRIBUTING.md): branches, commits and PRs.
+
+Requires Git and Docker (with Compose). For development: Node 22 (backend, frontend) and [uv](https://docs.astral.sh/uv/) (ML service).
+Install commands for Ubuntu, macOS and Windows: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md#everyone-install-the-tools).
 
 ```bash
 cp .env.example .env
