@@ -43,16 +43,16 @@ abror/chore/amd-rocm-setup
 [Conventional Commits](https://www.conventionalcommits.org/) format, with the area in brackets:
 
 ```
-<type>(<area>): <what changed>
+<type>(<area>)/<what changed>
 ```
 
 Areas: `ml`, `backend`, `frontend`, `contracts`, `infra`, `docs`.
 
 ```
-feat(ml): add autoencoder anomaly gate
-fix(backend): handle ML service timeout on /explain
-docs(contracts): add defect_type enum
-chore(infra): add Postgres healthcheck to compose
+feat(ml)/add autoencoder anomaly gate
+fix(backend)/handle ML service timeout on /explain
+docs(contracts)/add defect_type enum
+chore(infra)/add Postgres healthcheck to compose
 ```
 
 Small, focused commits. Present tense, lowercase, no full stop.
