@@ -39,7 +39,7 @@ Change them through a pull request that all three people review.
 
 ```
 contracts/    OpenAPI contracts (source of truth)
-ml-service/   FastAPI + PyTorch (ROCm) models + agent
+ml-service/   FastAPI + PyTorch (ROCm) models + agent, managed with uv
 backend/      Node + Express + TypeScript, Postgres
 frontend/     React 19 + Vite + TanStack Query + Tailwind + shadcn/ui
 docs/         Plan, tasks, decisions
@@ -55,7 +55,7 @@ docs/         Plan, tasks, decisions
 
 ## Quick start
 
-Requires Docker and Docker Compose.
+Requires Docker and Docker Compose. Python dependencies use [uv](https://docs.astral.sh/uv/).
 
 ```bash
 cp .env.example .env
@@ -74,10 +74,9 @@ that match the contract, so the frontend and backend can be built before the mod
 ### Run parts without Docker
 
 ```bash
-# ML service
-cd ml-service && python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+# ML service (uv)
+cd ml-service && uv sync
+ML_STUB=1 uv run uvicorn app.main:app --reload --port 8000
 
 # Backend
 cd backend && npm install && npm run dev

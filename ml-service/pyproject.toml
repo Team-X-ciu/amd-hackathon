@@ -1,0 +1,42 @@
+[project]
+name = "ml-service"
+version = "0.1.0"
+description = "Vision pipeline and defect agent (FastAPI, AMD ROCm)"
+requires-python = ">=3.12"
+# API layer: enough to run in stub mode (ML_STUB=1)
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "pydantic>=2.7",
+    "pillow>=10.4",
+]
+
+[project.optional-dependencies]
+# Models and agent.
+# On the AMD GPU machine, do NOT run `uv sync --extra ml`: these packages depend on torch,
+# and uv would install the CUDA build from PyPI. Use Dockerfile.rocm or
+# `uv pip install --system -r pyproject.toml --extra ml` inside the rocm/pytorch image,
+# so the image's ROCm torch is kept. See README, "Run on AMD Developer Cloud".
+ml = [
+    "numpy",
+    "opencv-python-headless",
+    "albumentations",
+    "segmentation-models-pytorch",
+    "timm",
+    "scikit-learn",
+    "sentence-transformers",
+    "faiss-cpu",
+    "pypdf",
+    "openai",
+    "langgraph",
+]
+
+[dependency-groups]
+dev = ["httpx", "ruff"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 110

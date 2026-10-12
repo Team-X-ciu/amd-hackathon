@@ -14,16 +14,14 @@ from PIL import Image, ImageDraw
 from . import config
 from .schemas import (
     BoundingBox,
-    Explanation,
     ExplainRequest,
+    Explanation,
     InspectResult,
     ModelVersions,
     Source,
 )
 
-STUB_VERSIONS = ModelVersions(
-    autoencoder="stub", segmentation="stub", classifier="stub", llm="stub"
-)
+STUB_VERSIONS = ModelVersions(autoencoder="stub", segmentation="stub", classifier="stub", llm="stub")
 
 
 def _severity(area_ratio: float) -> str:

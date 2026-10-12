@@ -5,13 +5,15 @@ Stateless: no database. Called only by the backend.
 """
 
 import io
+from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from PIL import Image, UnidentifiedImageError
 
 from . import config, stub
-from .schemas import Error, Explanation, ExplainRequest, Health, InspectResult, ModelsLoaded
+from .schemas import Error, ExplainRequest, Explanation, Health, InspectResult, ModelsLoaded
 
 app = FastAPI(
     title="ML Service (FastAPI)",
@@ -22,7 +24,7 @@ app = FastAPI(
 
 def _device() -> str:
     try:
-        import torch  # noqa: PLC0415  (optional until models are added)
+        import torch
     except ImportError:
         return "cpu (torch not installed)"
     if torch.cuda.is_available():  # ROCm builds of PyTorch also use the torch.cuda API
@@ -30,6 +32,14 @@ def _device() -> str:
         backend = "ROCm" if getattr(torch.version, "hip", None) else "CUDA"
         return f"cuda:0 ({name}, {backend})"
     return "cpu"
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(_, exc: RequestValidationError):
+    # Contract: invalid input is a 400 with the Error shape
+    return JSONResponse(
+        status_code=400, content=Error(error="Invalid input", detail=str(exc.errors())).model_dump()
+    )
 
 
 @app.exception_handler(HTTPException)
@@ -54,8 +64,8 @@ def health() -> Health:
     responses={400: {"model": Error}, 500: {"model": Error}},
 )
 async def inspect(
-    image: UploadFile = File(..., description="PNG or JPEG of one part"),
-    part_type: str | None = Form(None),
+    image: Annotated[UploadFile, File(description="PNG or JPEG of one part")],
+    part_type: Annotated[str | None, Form()] = None,
 ) -> InspectResult:
     raw = await image.read()
     if len(raw) > config.MAX_IMAGE_BYTES:

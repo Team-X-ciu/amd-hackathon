@@ -1,0 +1,20 @@
+# GPU image for AMD Developer Cloud. torch (ROCm build) comes from the base image;
+# uv installs everything else around it. Check the current validated tag at
+# https://rocm.docs.amd.com/projects/install-on-linux/en/latest/install/3rd-party/pytorch-install.html
+FROM rocm/pytorch:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.9.1
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /bin/
+
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+
+COPY pyproject.toml ./
+# --system: install into the image's Python, where ROCm torch already satisfies the torch requirement
+RUN uv pip install --system --break-system-packages -r pyproject.toml --extra ml \
+ && python -c "import torch; assert torch.version.hip, 'torch is not the ROCm build'; print('torch', torch.__version__, 'hip', torch.version.hip)"
+
+COPY app ./app
+COPY manuals ./manuals
+
+ENV ML_STUB=0
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
