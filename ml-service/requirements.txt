@@ -1,0 +1,6 @@
+# API layer. Enough to run the service in stub mode (ML_STUB=1).
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pydantic>=2.7
+pillow>=10.4

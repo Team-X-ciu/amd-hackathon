@@ -1,0 +1,283 @@
+openapi: 3.1.0
+info:
+  title: ML Service (FastAPI)
+  version: 0.1.0
+  description: |
+    Internal service owned by the AI team. Called ONLY by the TypeScript backend,
+    never by the frontend. Stateless: no database, image in -> result out.
+    Runs on AMD Developer Cloud (models on ROCm, LLM served via vLLM).
+
+    Pipeline for /inspect:
+      1. Autoencoder anomaly gate (trained on good parts only)
+      2. If anomalous: segmentation (mask) + classification (defect type)
+    /explain runs the LLM agent with RAG over the QC manual.
+servers:
+  - url: http://localhost:8000
+    description: Local dev
+  - url: "{mlServiceUrl}"
+    description: AMD Cloud (set ML_SERVICE_URL in the backend's env)
+    variables:
+      mlServiceUrl:
+        default: http://ml-service:8000
+
+paths:
+  /health:
+    get:
+      summary: Liveness and model status
+      operationId: health
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /inspect:
+    post:
+      summary: Run the vision pipeline on one image
+      operationId: inspect
+      description: Fast path (target under 1 s). No LLM call here.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: PNG or JPEG of one part
+                part_type:
+                  type: string
+                  description: Product/category, e.g. "metal_nut". Optional if a single product is used.
+                  example: metal_nut
+      responses:
+        "200":
+          description: Inspection result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InspectResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /explain:
+    post:
+      summary: Explain a defect and recommend an action (LLM agent + RAG)
+      operationId: explain
+      description: |
+        Slow path (several seconds). Also handles operator follow-up questions
+        via the optional `question` field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExplainRequest"
+      responses:
+        "200":
+          description: Explanation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Explanation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          description: LLM endpoint unavailable; backend should show a fallback message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  responses:
+    BadRequest:
+      description: Invalid input (wrong file type, missing field)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServerError:
+      description: Model failure
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Severity:
+      type: string
+      enum: [none, low, medium, high]
+
+    BoundingBox:
+      type: object
+      required: [x, y, width, height]
+      properties:
+        x: { type: integer, description: Left, in pixels }
+        y: { type: integer, description: Top, in pixels }
+        width: { type: integer }
+        height: { type: integer }
+
+    ModelVersions:
+      type: object
+      properties:
+        autoencoder: { type: string, example: ae-v1 }
+        segmentation: { type: string, example: unet-r34-v1 }
+        classifier: { type: string, example: resnet18-v1 }
+        llm: { type: string, example: Qwen2.5-7B-Instruct }
+
+    InspectResult:
+      type: object
+      required:
+        - anomaly_score
+        - anomaly_threshold
+        - is_defective
+        - severity
+        - model_versions
+        - latency_ms
+      properties:
+        anomaly_score:
+          type: number
+          description: Autoencoder reconstruction error, normalised to 0-1
+          example: 0.87
+        anomaly_threshold:
+          type: number
+          example: 0.5
+        is_defective:
+          type: boolean
+        defect_type:
+          type: [string, "null"]
+          description: |
+            Null when not defective. Final list depends on the dataset;
+            agree it on day one (e.g. scratch, crack, dent, contamination, color).
+          example: scratch
+        defect_confidence:
+          type: [number, "null"]
+          example: 0.92
+        severity:
+          $ref: "#/components/schemas/Severity"
+        defect_area_ratio:
+          type: [number, "null"]
+          description: Fraction of the part's pixels covered by the mask (0-1)
+          example: 0.031
+        bounding_boxes:
+          type: array
+          items:
+            $ref: "#/components/schemas/BoundingBox"
+        mask_png_base64:
+          type: [string, "null"]
+          description: Binary mask, same size as input, base64-encoded PNG. Null when not defective.
+        heatmap_png_base64:
+          type: [string, "null"]
+          description: Optional autoencoder error heatmap for the UI overlay
+        model_versions:
+          $ref: "#/components/schemas/ModelVersions"
+        latency_ms:
+          type: integer
+          example: 240
+
+    ExplainRequest:
+      type: object
+      required: [defect_type, severity]
+      properties:
+        defect_type: { type: string, example: scratch }
+        severity:
+          $ref: "#/components/schemas/Severity"
+        anomaly_score: { type: number, example: 0.87 }
+        defect_area_ratio: { type: number, example: 0.031 }
+        part_type: { type: string, example: metal_nut }
+        question:
+          type: [string, "null"]
+          description: Operator follow-up question; null for the first explanation
+          example: Can this part be reworked?
+        history:
+          type: array
+          description: Previous turns for follow-up questions
+          items:
+            $ref: "#/components/schemas/ChatTurn"
+
+    ChatTurn:
+      type: object
+      required: [role, content]
+      properties:
+        role: { type: string, enum: [operator, assistant] }
+        content: { type: string }
+
+    Source:
+      type: object
+      required: [document, section]
+      properties:
+        document: { type: string, example: QC Manual v1 }
+        section: { type: string, example: "4.2 Surface scratches" }
+        snippet: { type: string, description: Short retrieved passage shown to the operator }
+
+    Explanation:
+      type: object
+      required:
+        - summary
+        - recommended_action
+        - priority
+        - sources
+        - needs_human_review
+      properties:
+        summary:
+          type: string
+          example: Linear scratch on the outer face, about 3% of the surface.
+        likely_causes:
+          type: array
+          items: { type: string }
+          example: [Worn guide roller, Debris on conveyor]
+        recommended_action:
+          type: string
+          example: Reject the part and inspect roller 3 before the next batch.
+        priority:
+          type: string
+          enum: [low, medium, high, stop_line]
+        answer:
+          type: [string, "null"]
+          description: Answer to `question`, when one was asked
+        sources:
+          type: array
+          description: Manual sections used. Empty means the agent found no source and must say so.
+          items:
+            $ref: "#/components/schemas/Source"
+        needs_human_review:
+          type: boolean
+          description: True when confidence is low or no source was found
+        model:
+          type: string
+          example: Qwen2.5-7B-Instruct
+        latency_ms:
+          type: integer
+
+    Health:
+      type: object
+      required: [status, models_loaded]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        models_loaded:
+          type: object
+          properties:
+            autoencoder: { type: boolean }
+            segmentation: { type: boolean }
+            classifier: { type: boolean }
+            llm_reachable: { type: boolean }
+        device:
+          type: string
+          description: e.g. "cuda:0 (AMD Instinct MI300X, ROCm)" -- useful to show AMD usage in the demo
+        stub:
+          type: boolean
+          description: True when the service returns fake results (ML_STUB=1)
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        detail: { type: string }

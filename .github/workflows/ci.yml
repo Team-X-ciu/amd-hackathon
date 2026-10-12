@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install openapi-spec-validator
+      - run: openapi-spec-validator contracts/*.yaml
+
+  ml-service:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ml-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt httpx
+      - name: Smoke test stub mode
+        env:
+          ML_STUB: "1"
+        run: |
+          python - <<'EOF'
+          import io
+          from fastapi.testclient import TestClient
+          from PIL import Image
+          from app.main import app
+          c = TestClient(app)
+          assert c.get("/health").status_code == 200
+          buf = io.BytesIO(); Image.new("RGB", (128, 128)).save(buf, "PNG")
+          r = c.post("/inspect", files={"image": ("p.png", buf.getvalue(), "image/png")})
+          assert r.status_code == 200, r.text
+          r = c.post("/explain", json={"defect_type": "scratch", "severity": "high"})
+          assert r.status_code == 200, r.text
+          print("ok")
+          EOF
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Generated types match the contracts
+        run: npm run gen:types && git diff --exit-code src/api
+      - run: npm run typecheck
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Generated types match the contract
+        run: npm run gen:types && git diff --exit-code src/api
+      - run: npm run build

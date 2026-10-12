@@ -1,0 +1,17 @@
+# Models and agent. Install on the AMD GPU machine.
+#
+# Do NOT add torch / torchvision here: plain `pip install torch` gets the CUDA build.
+# Use the ROCm build that ships with the AMD Developer Cloud image or rocm/pytorch,
+# or install it from the ROCm index listed on pytorch.org.
+-r requirements.txt
+numpy
+opencv-python-headless
+albumentations
+segmentation-models-pytorch
+timm
+scikit-learn
+sentence-transformers
+faiss-cpu
+pypdf
+openai
+langgraph

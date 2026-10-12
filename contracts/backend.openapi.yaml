@@ -1,0 +1,546 @@
+openapi: 3.1.0
+info:
+  title: Inspection Backend (TypeScript)
+  version: 0.1.0
+  description: |
+    Public API owned by the backend team. The frontend talks ONLY to this API.
+    The backend stores inspections, runs the line simulator, and calls the
+    internal ML service (/inspect, /explain) -- see ml-service.openapi.yaml.
+
+    Flow:
+      1. POST /inspections            -> backend calls ML /inspect, saves result
+      2. POST /inspections/{id}/explain -> backend calls ML /explain, saves it
+      3. POST /inspections/{id}/decision -> operator accepts/rejects
+      Live updates arrive on GET /events (Server-Sent Events).
+servers:
+  - url: http://localhost:3000/api
+    description: Local dev
+
+paths:
+  /inspections:
+    post:
+      summary: Upload an image and inspect it
+      operationId: createInspection
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                part_type:
+                  type: string
+                  example: metal_nut
+                line_id:
+                  type: string
+                  example: line-1
+      responses:
+        "201":
+          description: Inspection created and analysed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inspection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "502":
+          description: ML service failed or timed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      summary: List inspections (newest first)
+      operationId: listInspections
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/InspectionStatus"
+        - name: defective
+          in: query
+          schema: { type: boolean }
+        - name: defect_type
+          in: query
+          schema: { type: string }
+        - name: line_id
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 200 }
+        - name: cursor
+          in: query
+          description: Value of `next_cursor` from the previous page
+          schema: { type: string }
+      responses:
+        "200":
+          description: Page of inspections
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InspectionPage"
+
+  /inspections/{id}:
+    get:
+      summary: Get one inspection with its explanation, decision and chat
+      operationId: getInspection
+      parameters:
+        - $ref: "#/components/parameters/InspectionId"
+      responses:
+        "200":
+          description: Inspection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inspection"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /inspections/{id}/image:
+    get:
+      summary: Original image
+      operationId: getInspectionImage
+      parameters:
+        - $ref: "#/components/parameters/InspectionId"
+      responses:
+        "200":
+          description: Image
+          content:
+            image/png: {}
+            image/jpeg: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /inspections/{id}/mask:
+    get:
+      summary: Segmentation mask for the overlay
+      operationId: getInspectionMask
+      parameters:
+        - $ref: "#/components/parameters/InspectionId"
+      responses:
+        "200":
+          description: Mask PNG
+          content:
+            image/png: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /inspections/{id}/explain:
+    post:
+      summary: Ask the agent to explain the defect and recommend an action
+      operationId: explainInspection
+      description: Slow (several seconds). Frontend should show a loading state.
+      parameters:
+        - $ref: "#/components/parameters/InspectionId"
+      responses:
+        "200":
+          description: Explanation saved on the inspection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inspection"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Inspection is not defective; nothing to explain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Agent unavailable; show fallback "Refer to QC manual / supervisor"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /inspections/{id}/chat:
+    post:
+      summary: Operator follow-up question to the agent
+      operationId: chatInspection
+      parameters:
+        - $ref: "#/components/parameters/InspectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  example: Can this part be reworked instead of scrapped?
+      responses:
+        "200":
+          description: Agent reply (also appended to the inspection's chat)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatMessage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /inspections/{id}/decision:
+    post:
+      summary: Record the operator's decision
+      operationId: decideInspection
+      parameters:
+        - $ref: "#/components/parameters/InspectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionInput"
+      responses:
+        "200":
+          description: Updated inspection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inspection"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /stats:
+    get:
+      summary: Aggregates for the history page and the "measurable improvement" slide
+      operationId: getStats
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: line_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stats"
+
+  /simulator:
+    get:
+      summary: Line simulator status
+      operationId: getSimulator
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulatorStatus"
+  /simulator/start:
+    post:
+      summary: Start replaying test images as a live camera feed
+      operationId: startSimulator
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                interval_ms:
+                  type: integer
+                  default: 3000
+                defect_rate:
+                  type: number
+                  description: Share of defective images to replay (0-1), for a lively demo
+                  default: 0.2
+                line_id:
+                  type: string
+                  default: line-1
+      responses:
+        "200":
+          description: Started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulatorStatus"
+  /simulator/stop:
+    post:
+      summary: Stop the simulator
+      operationId: stopSimulator
+      responses:
+        "200":
+          description: Stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulatorStatus"
+
+  /events:
+    get:
+      summary: Live updates (Server-Sent Events)
+      operationId: streamEvents
+      description: |
+        Each event's `data` is a JSON `Event`. Event names:
+        `inspection.created`, `inspection.explained`, `inspection.decided`.
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/Event"
+
+  /health:
+    get:
+      summary: Backend + ML service health
+      operationId: health
+      responses:
+        "200":
+          description: Health
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, ml_service]
+                properties:
+                  status: { type: string, enum: [ok, degraded] }
+                  ml_service:
+                    type: string
+                    enum: [ok, degraded, down]
+                  ml_device:
+                    type: string
+                    description: Passed through from ML /health, e.g. AMD Instinct MI300X
+
+components:
+  parameters:
+    InspectionId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    InspectionStatus:
+      type: string
+      description: |
+        inspected  -> vision result ready
+        explaining -> agent running
+        explained  -> agent result ready
+        decided    -> operator acted
+        failed     -> ML error
+      enum: [inspected, explaining, explained, decided, failed]
+
+    Severity:
+      type: string
+      enum: [none, low, medium, high]
+
+    BoundingBox:
+      type: object
+      required: [x, y, width, height]
+      properties:
+        x: { type: integer }
+        y: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+
+    VisionResult:
+      type: object
+      description: Copied from ML /inspect (mask stored as a file, not base64)
+      required: [anomaly_score, anomaly_threshold, is_defective, severity]
+      properties:
+        anomaly_score: { type: number }
+        anomaly_threshold: { type: number }
+        is_defective: { type: boolean }
+        defect_type: { type: [string, "null"] }
+        defect_confidence: { type: [number, "null"] }
+        severity:
+          $ref: "#/components/schemas/Severity"
+        defect_area_ratio: { type: [number, "null"] }
+        bounding_boxes:
+          type: array
+          items:
+            $ref: "#/components/schemas/BoundingBox"
+        mask_url:
+          type: [string, "null"]
+          example: /api/inspections/2b1f.../mask
+        heatmap_url:
+          type: [string, "null"]
+        latency_ms: { type: integer }
+
+    Source:
+      type: object
+      required: [document, section]
+      properties:
+        document: { type: string }
+        section: { type: string }
+        snippet: { type: string }
+
+    Explanation:
+      type: object
+      description: Copied from ML /explain
+      required: [summary, recommended_action, priority, sources, needs_human_review]
+      properties:
+        summary: { type: string }
+        likely_causes:
+          type: array
+          items: { type: string }
+        recommended_action: { type: string }
+        priority:
+          type: string
+          enum: [low, medium, high, stop_line]
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/Source"
+        needs_human_review: { type: boolean }
+        model: { type: string }
+        latency_ms: { type: integer }
+
+    ChatMessage:
+      type: object
+      required: [role, content, created_at]
+      properties:
+        role: { type: string, enum: [operator, assistant] }
+        content: { type: string }
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/Source"
+        created_at: { type: string, format: date-time }
+
+    DecisionInput:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [accept, reject, rework]
+        followed_recommendation:
+          type: boolean
+          description: Did the operator follow the agent's action? Used in stats.
+        note: { type: string }
+        operator: { type: string, example: operator-1 }
+
+    Decision:
+      allOf:
+        - $ref: "#/components/schemas/DecisionInput"
+        - type: object
+          required: [decided_at, time_to_decision_ms]
+          properties:
+            decided_at: { type: string, format: date-time }
+            time_to_decision_ms:
+              type: integer
+              description: From inspection created to decision -- key metric for the pitch
+
+    Inspection:
+      type: object
+      required: [id, status, created_at, image_url]
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          $ref: "#/components/schemas/InspectionStatus"
+        line_id: { type: string }
+        part_type: { type: string }
+        source:
+          type: string
+          enum: [upload, simulator]
+        image_url: { type: string, example: /api/inspections/2b1f.../image }
+        created_at: { type: string, format: date-time }
+        vision:
+          oneOf:
+            - $ref: "#/components/schemas/VisionResult"
+            - type: "null"
+        explanation:
+          oneOf:
+            - $ref: "#/components/schemas/Explanation"
+            - type: "null"
+        decision:
+          oneOf:
+            - $ref: "#/components/schemas/Decision"
+            - type: "null"
+        chat:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        error:
+          type: [string, "null"]
+
+    InspectionPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Inspection"
+        next_cursor:
+          type: [string, "null"]
+
+    Stats:
+      type: object
+      required: [total, defective, defect_rate]
+      properties:
+        total: { type: integer }
+        defective: { type: integer }
+        defect_rate: { type: number }
+        by_defect_type:
+          type: object
+          additionalProperties: { type: integer }
+          example: { scratch: 12, crack: 4 }
+        by_severity:
+          type: object
+          additionalProperties: { type: integer }
+        avg_inspection_latency_ms: { type: integer }
+        avg_time_to_decision_ms: { type: integer }
+        recommendation_follow_rate:
+          type: number
+          description: Share of decisions where the operator followed the agent
+        needs_review_count: { type: integer }
+
+    SimulatorStatus:
+      type: object
+      required: [running]
+      properties:
+        running: { type: boolean }
+        interval_ms: { type: integer }
+        defect_rate: { type: number }
+        line_id: { type: string }
+        processed: { type: integer }
+
+    Event:
+      type: object
+      required: [type, inspection_id, at]
+      properties:
+        type:
+          type: string
+          enum: [inspection.created, inspection.explained, inspection.decided]
+        inspection_id: { type: string, format: uuid }
+        at: { type: string, format: date-time }
+        inspection:
+          $ref: "#/components/schemas/Inspection"
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        detail: { type: string }

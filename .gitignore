@@ -1,0 +1,42 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Node
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+npm-debug.log*
+
+# Data and model weights (too large for git; document how to get them instead)
+ml-service/data/*
+!ml-service/data/.gitkeep
+ml-service/models/*
+!ml-service/models/.gitkeep
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.ckpt
+ml-service/index/
+
+# Runtime uploads
+backend/uploads/
