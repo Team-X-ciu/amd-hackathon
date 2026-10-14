@@ -49,9 +49,9 @@ docs/         Getting started, code walkthrough, decisions, original plan
 
 | Area | Owner | Scope |
 | --- | --- | --- |
-| ML + agent, tech lead | @Abrik-Ai | models, RAG agent, AMD setup, contracts |
-| Backend | _tbd_ | API, database, simulator, Docker, deployment |
-| Frontend | _tbd_ | operator dashboard, cover image, slides, demo video |
+| ML + agent, tech lead | | models, RAG agent, AMD setup, contracts |
+| Backend |  | API, database, simulator, Docker, deployment |
+| Frontend |  | operator dashboard, cover image, slides, demo video |
 
 ## Quick start
 
@@ -95,7 +95,7 @@ cd frontend && npm install && npm run dev
 
 ```bash
 cd backend  && npm run gen:types   # ml-service contract -> src/api/ml-types.ts
-cd frontend && npx openapi-typescript ../contracts/backend.openapi.yaml -o src/api/types.ts
+cd frontend && npm run gen:types   # backend contract -> src/api/types.ts
 ```
 
 ## Data
