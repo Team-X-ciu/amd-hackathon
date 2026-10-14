@@ -34,7 +34,10 @@ services:
       ML_SERVICE_URL: ${ML_SERVICE_URL:-http://ml-service:8000}
       ML_TIMEOUT_MS: ${ML_TIMEOUT_MS:-30000}
       PORT: 3000
+      OPENAPI_PATH: /contracts/backend.openapi.yaml   # for the /docs page
     ports: ["${BACKEND_PORT:-3000}:3000"]
+    volumes:
+      - ./contracts:/contracts:ro
     depends_on:
       db:
         condition: service_healthy

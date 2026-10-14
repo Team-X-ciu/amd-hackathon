@@ -71,6 +71,7 @@ docker compose up --build
 | --- | --- |
 | Frontend | http://localhost:5173 |
 | Backend API | http://localhost:3000/api/health |
+| Backend docs | http://localhost:3000/docs |
 | ML service docs | http://localhost:8000/docs |
 
 The ML service starts in **stub mode** (`ML_STUB=1`): it returns realistic fake results

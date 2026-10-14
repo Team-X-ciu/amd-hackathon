@@ -264,11 +264,20 @@ The Express app.
 - **Every other contract route** is registered and returns `501 Not implemented`, so the list of
   work is visible in one place.
 
+### `src/docs.ts`
+
+Interactive API docs at **`/docs`** (Swagger UI, like FastAPI's `/docs`) and the raw spec at
+`/openapi.json`. It reads the **contract** (`contracts/backend.openapi.yaml`, path from
+`OPENAPI_PATH`; docker compose mounts `contracts/` at `/contracts`), so the page shows the agreed
+API including routes not built yet (they answer 501 in "Try it out"). FastAPI builds its docs
+from the code; here the contract comes first, so the docs come from the contract. If the file
+can't be read, the docs are skipped with a warning and the API still starts.
+
 ### `db/init.sql`
 
 Three tables, mirroring the contract:
 
-- **`inspections`**: one row per inspected part. `status` limited to the five contract values by
+- **`inspections`**: one row per inspected part. `status` limited to the six contract values by
   a `check` constraint; file paths for image, mask and heatmap; `vision` and `explanation` stored
   as **`jsonb`** (the ML results as JSON, queryable); `created_at`. Indexes on time and line for
   the history and stats queries.
