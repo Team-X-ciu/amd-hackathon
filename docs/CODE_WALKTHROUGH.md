@@ -105,17 +105,19 @@ Built around one object, **`Inspection`**: `id`, `status`, line and part, `image
 `created_at`, and three parts that fill in over time: `vision` (copied from the ML result, with
 the mask stored as a file and exposed as `mask_url`), `explanation`, `decision`, plus `chat`.
 
-`status` moves through: `inspected` → `explaining` → `explained` → `decided` (or `failed`).
+`status` moves through: `explaining` → `explained` → `decided` for a defective board (good boards stay
+`inspected`). The explanation runs in the background after the upload; if it fails the status is
+`explain_failed` and it can be retried. `failed` means the vision step itself failed.
 
 Endpoints, grouped:
 
 | Group | Endpoints |
 | --- | --- |
 | Inspections | `POST /inspections` (upload), `GET /inspections` (filters + cursor paging), `GET /inspections/{id}`, `/image`, `/mask` |
-| Agent | `POST /inspections/{id}/explain`, `POST /inspections/{id}/chat` |
+| Agent | `POST /inspections/{id}/explain` (retry, answers `202`), `POST /inspections/{id}/chat` |
 | Operator | `POST /inspections/{id}/decision` (accept / reject / rework, records `time_to_decision_ms`) |
 | Dashboard | `GET /stats` (counts, rates, averages), `/simulator`, `/simulator/start`, `/simulator/stop` |
-| Live | `GET /events`: Server-Sent Events `inspection.created`, `.explained`, `.decided` |
+| Live | `GET /events`: Server-Sent Events `inspection.created`, `.explained`, `.explain_failed`, `.decided` |
 | Ops | `GET /health` (backend + ML status) |
 
 `contracts/README.md` lists the rules for changing contracts and the open decisions.

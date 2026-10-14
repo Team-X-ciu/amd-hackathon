@@ -8,9 +8,14 @@ info:
     internal ML service (/inspect, /explain) -- see ml-service.openapi.yaml.
 
     Flow:
-      1. POST /inspections            -> backend calls ML /inspect, saves result
-      2. POST /inspections/{id}/explain -> backend calls ML /explain, saves it
-      3. POST /inspections/{id}/decision -> operator accepts/rejects
+      1. POST /inspections -> backend calls ML /inspect, saves the result and answers
+         immediately. If the board is defective, the backend then calls ML /explain
+         in the background (status `explaining`).
+      2. When the explanation is ready: status `explained` + event `inspection.explained`.
+         If the agent fails or times out: status `explain_failed` + event
+         `inspection.explain_failed`; POST /inspections/{id}/explain retries.
+      3. POST /inspections/{id}/decision -> operator accepts / rejects / reworks.
+         The operator may decide at any time, also before the explanation arrives.
       Live updates arrive on GET /events (Server-Sent Events).
 servers:
   - url: http://localhost:3000/api
@@ -21,6 +26,10 @@ paths:
     post:
       summary: Upload an image and inspect it
       operationId: createInspection
+      description: |
+        Returns as soon as the vision result is saved (no LLM wait).
+        Defective board -> status `explaining` (the explanation runs in the background).
+        Good board -> status `inspected` (nothing to explain).
       requestBody:
         required: true
         content:
@@ -39,7 +48,7 @@ paths:
                   example: line-1
       responses:
         "201":
-          description: Inspection created and analysed
+          description: Inspection created with its vision result
           content:
             application/json:
               schema:
@@ -132,14 +141,17 @@ paths:
 
   /inspections/{id}/explain:
     post:
-      summary: Ask the agent to explain the defect and recommend an action
+      summary: Retry the explanation (it normally starts automatically)
       operationId: explainInspection
-      description: Slow (several seconds). Frontend should show a loading state.
+      description: |
+        Explanations start by themselves after POST /inspections. Call this only to retry,
+        e.g. when status is `explain_failed`. Answers immediately; the result arrives as an
+        `inspection.explained` or `inspection.explain_failed` event.
       parameters:
         - $ref: "#/components/parameters/InspectionId"
       responses:
-        "200":
-          description: Explanation saved on the inspection
+        "202":
+          description: Explanation (re)started; the inspection now has status `explaining`
           content:
             application/json:
               schema:
@@ -147,13 +159,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: Inspection is not defective; nothing to explain
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "503":
-          description: Agent unavailable; show fallback "Refer to QC manual / supervisor"
+          description: Nothing to start — the board is not defective, or an explanation is already running
           content:
             application/json:
               schema:
@@ -286,7 +292,8 @@ paths:
       operationId: streamEvents
       description: |
         Each event's `data` is a JSON `Event`. Event names:
-        `inspection.created`, `inspection.explained`, `inspection.decided`.
+        `inspection.created`, `inspection.explained`, `inspection.explain_failed`,
+        `inspection.decided`.
       responses:
         "200":
           description: SSE stream
@@ -342,12 +349,13 @@ components:
     InspectionStatus:
       type: string
       description: |
-        inspected  -> vision result ready
-        explaining -> agent running
-        explained  -> agent result ready
-        decided    -> operator acted
-        failed     -> ML error
-      enum: [inspected, explaining, explained, decided, failed]
+        inspected      -> vision result ready; good board, nothing to explain
+        explaining     -> defective board, agent running in the background
+        explained      -> agent result ready
+        explain_failed -> agent failed or timed out; `error` says why; retry possible
+        decided        -> operator acted (final; a late explanation is still stored)
+        failed         -> vision (ML /inspect) failed; no result
+      enum: [inspected, explaining, explained, explain_failed, decided, failed]
 
     DefectType:
       type: string
@@ -499,6 +507,7 @@ components:
             $ref: "#/components/schemas/ChatMessage"
         error:
           type: [string, "null"]
+          description: Why the last step failed (status `failed` or `explain_failed`)
 
     InspectionPage:
       type: object
@@ -548,7 +557,7 @@ components:
       properties:
         type:
           type: string
-          enum: [inspection.created, inspection.explained, inspection.decided]
+          enum: [inspection.created, inspection.explained, inspection.explain_failed, inspection.decided]
         inspection_id: { type: string, format: uuid }
         at: { type: string, format: date-time }
         inspection:
