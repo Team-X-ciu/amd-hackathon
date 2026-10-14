@@ -5,7 +5,7 @@
 create table if not exists inspections (
   id            uuid primary key default gen_random_uuid(),
   status        text not null default 'inspected'
-                check (status in ('inspected', 'explaining', 'explained', 'decided', 'failed')),
+                check (status in ('inspected', 'explaining', 'explained', 'explain_failed', 'decided', 'failed')),
   line_id       text,
   part_type     text,
   source        text not null default 'upload' check (source in ('upload', 'simulator')),

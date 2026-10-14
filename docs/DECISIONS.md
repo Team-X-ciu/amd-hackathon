@@ -62,3 +62,22 @@ use `anomaly_detector` + `classifier` instead of `autoencoder` + `segmentation`.
 - defective but no area measured → `medium`
 
 Implemented once in `ml-service/app/severity.py`, used by the stub and the real pipeline.
+
+## 4. Explanations run in the background (14 Oct 2026, issue #4)
+
+**Chosen:** `POST /inspections` answers as soon as the vision result is saved. For a defective
+board the backend then calls the ML service's `/explain` in the background:
+- status `explaining` → `explained`, event `inspection.explained`;
+- on error or timeout → status `explain_failed` (+ `error`), event `inspection.explain_failed`;
+- `POST /inspections/{id}/explain` is only a retry and answers `202 Accepted` at once.
+
+The operator can decide at any time; a late explanation is still stored.
+The ML service's `/explain` stays a normal synchronous request.
+
+**Considered:** the frontend calling `POST /inspections/{id}/explain` and waiting several seconds
+for the LLM.
+
+**Why:** the operator sees the mask and defect type immediately instead of waiting for the LLM;
+a slow or failed agent never blocks the inspection; the `explaining` status and events already
+existed in the contract. No job queue: a background promise in the backend is enough for the demo
+(an explanation in progress is lost if the backend restarts — acceptable this week).

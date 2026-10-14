@@ -14,7 +14,12 @@ export interface paths {
         /** List inspections (newest first) */
         get: operations["listInspections"];
         put?: never;
-        /** Upload an image and inspect it */
+        /**
+         * Upload an image and inspect it
+         * @description Returns as soon as the vision result is saved (no LLM wait).
+         *     Defective board -> status `explaining` (the explanation runs in the background).
+         *     Good board -> status `inspected` (nothing to explain).
+         */
         post: operations["createInspection"];
         delete?: never;
         options?: never;
@@ -83,8 +88,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Ask the agent to explain the defect and recommend an action
-         * @description Slow (several seconds). Frontend should show a loading state.
+         * Retry the explanation (it normally starts automatically)
+         * @description Explanations start by themselves after POST /inspections. Call this only to retry,
+         *     e.g. when status is `explain_failed`. Answers immediately; the result arrives as an
+         *     `inspection.explained` or `inspection.explain_failed` event.
          */
         post: operations["explainInspection"];
         delete?: never;
@@ -205,7 +212,8 @@ export interface paths {
         /**
          * Live updates (Server-Sent Events)
          * @description Each event's `data` is a JSON `Event`. Event names:
-         *     `inspection.created`, `inspection.explained`, `inspection.decided`.
+         *     `inspection.created`, `inspection.explained`, `inspection.explain_failed`,
+         *     `inspection.decided`.
          */
         get: operations["streamEvents"];
         put?: never;
@@ -238,14 +246,15 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * @description inspected  -> vision result ready
-         *     explaining -> agent running
-         *     explained  -> agent result ready
-         *     decided    -> operator acted
-         *     failed     -> ML error
+         * @description inspected      -> vision result ready; good board, nothing to explain
+         *     explaining     -> defective board, agent running in the background
+         *     explained      -> agent result ready
+         *     explain_failed -> agent failed or timed out; `error` says why; retry possible
+         *     decided        -> operator acted (final; a late explanation is still stored)
+         *     failed         -> vision (ML /inspect) failed; no result
          * @enum {string}
          */
-        InspectionStatus: "inspected" | "explaining" | "explained" | "decided" | "failed";
+        InspectionStatus: "inspected" | "explaining" | "explained" | "explain_failed" | "decided" | "failed";
         /**
          * @description Defect classes of VisA pcb1, plus `unknown` when the classifier is not confident.
          * @enum {string}
@@ -336,6 +345,7 @@ export interface components {
             explanation?: components["schemas"]["Explanation"] | null;
             decision?: components["schemas"]["Decision"] | null;
             chat?: components["schemas"]["ChatMessage"][];
+            /** @description Why the last step failed (status `failed` or `explain_failed`) */
             error?: string | null;
         };
         InspectionPage: {
@@ -373,7 +383,7 @@ export interface components {
         };
         Event: {
             /** @enum {string} */
-            type: "inspection.created" | "inspection.explained" | "inspection.decided";
+            type: "inspection.created" | "inspection.explained" | "inspection.explain_failed" | "inspection.decided";
             /** Format: uuid */
             inspection_id: string;
             /** Format: date-time */
@@ -461,7 +471,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Inspection created and analysed */
+            /** @description Inspection created with its vision result */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -563,8 +573,8 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Explanation saved on the inspection */
-            200: {
+            /** @description Explanation (re)started; the inspection now has status `explaining` */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -573,17 +583,8 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-            /** @description Inspection is not defective; nothing to explain */
+            /** @description Nothing to start — the board is not defective, or an explanation is already running */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Agent unavailable; show fallback "Refer to QC manual / supervisor" */
-            503: {
                 headers: {
                     [name: string]: unknown;
                 };

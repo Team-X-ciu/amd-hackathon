@@ -169,11 +169,13 @@ Easier: paste the file into https://editor.swagger.io to see it as clickable doc
 Frontend                    Backend                         ML service
 POST /inspections  ───────► saves image ──────────────────► POST /inspect
                             saves result ◄───────────────── InspectResult (score, mask, type)
-◄─── Inspection (status: inspected)
+◄─── Inspection (status: explaining)        good board: status inspected, done here
 
-POST /inspections/{id}/explain ─► ─────────────────────────► POST /explain
+                            in the background:
+                            ───────────────────────────────► POST /explain
                             saves explanation ◄──────────── Explanation (summary, action, sources)
-◄─── Inspection (status: explained)
+◄─── event inspection.explained  (status: explained)
+     or inspection.explain_failed (status: explain_failed → POST /inspections/{id}/explain retries)
 
 POST /inspections/{id}/decision ─► saves decision
 ◄─── Inspection (status: decided)
@@ -240,8 +242,11 @@ cd backend && npm install && npm run dev
    (The frontend's test screen reads the spike's `{ vision }` shape; tell the frontend dev when you
    switch, so it's updated in the same PR or right after.)
 2. `GET /inspections`, `GET /inspections/{id}`, `GET /inspections/{id}/image`, `.../mask`.
-3. `POST /inspections/{id}/explain` → calls `mlExplain`; then `/chat` and `/decision`.
-   Use a timeout and return `503` if the agent is slow or down; the UI shows a fallback.
+3. Explanations in the background: after saving a defective inspection, call `mlExplain`
+   without making the request wait (status `explaining`). On success save it, set `explained`
+   and send the `inspection.explained` event; on error or timeout set `explain_failed`, fill
+   `error` and send `inspection.explain_failed`. `POST /inspections/{id}/explain` restarts it
+   and answers `202`. Then `/chat` and `/decision`.
 4. `GET /stats`, the simulator (`/simulator/*`) and live updates (`GET /events`, Server-Sent Events).
 
 **Tips:** type your route responses with the generated types
