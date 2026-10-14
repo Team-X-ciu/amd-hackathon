@@ -33,8 +33,7 @@ paths:
                   type: string
                   format: binary
                 part_type:
-                  type: string
-                  example: metal_nut
+                  $ref: "#/components/schemas/PartType"
                 line_id:
                   type: string
                   example: line-1
@@ -66,7 +65,8 @@ paths:
           schema: { type: boolean }
         - name: defect_type
           in: query
-          schema: { type: string }
+          schema:
+            $ref: "#/components/schemas/DefectType"
         - name: line_id
           in: query
           schema: { type: string }
@@ -118,7 +118,7 @@ paths:
 
   /inspections/{id}/mask:
     get:
-      summary: Segmentation mask for the overlay
+      summary: Defect mask for the overlay (from the PatchCore heatmap)
       operationId: getInspectionMask
       parameters:
         - $ref: "#/components/parameters/InspectionId"
@@ -349,8 +349,20 @@ components:
         failed     -> ML error
       enum: [inspected, explaining, explained, decided, failed]
 
+    DefectType:
+      type: string
+      description: Defect classes of VisA pcb1, plus `unknown` when the classifier is not confident.
+      enum: [bent, melt, scratch, missing, unknown]
+
+    PartType:
+      type: string
+      enum: [pcb1]
+
     Severity:
       type: string
+      description: |
+        none = not defective. `missing` is always high. Other types by defect area:
+        < 1% low, 1-5% medium, > 5% high.
       enum: [none, low, medium, high]
 
     BoundingBox:
@@ -370,7 +382,10 @@ components:
         anomaly_score: { type: number }
         anomaly_threshold: { type: number }
         is_defective: { type: boolean }
-        defect_type: { type: [string, "null"] }
+        defect_type:
+          anyOf:
+            - $ref: "#/components/schemas/DefectType"
+            - type: "null"
         defect_confidence: { type: [number, "null"] }
         severity:
           $ref: "#/components/schemas/Severity"
@@ -459,7 +474,8 @@ components:
         status:
           $ref: "#/components/schemas/InspectionStatus"
         line_id: { type: string }
-        part_type: { type: string }
+        part_type:
+          $ref: "#/components/schemas/PartType"
         source:
           type: string
           enum: [upload, simulator]
@@ -505,7 +521,7 @@ components:
         by_defect_type:
           type: object
           additionalProperties: { type: integer }
-          example: { scratch: 12, crack: 4 }
+          example: { scratch: 12, missing: 4 }
         by_severity:
           type: object
           additionalProperties: { type: integer }

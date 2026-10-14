@@ -128,7 +128,8 @@ Endpoints, grouped:
 
 | File | What it does |
 | --- | --- |
-| `pyproject.toml` | Python project definition for uv. `dependencies` = the API layer (FastAPI, uvicorn, python-multipart for uploads, Pydantic, Pillow). `[project.optional-dependencies] ml` = models and agent (numpy, OpenCV, albumentations, segmentation-models-pytorch, timm, scikit-learn, sentence-transformers, FAISS, pypdf, openai, LangGraph). `[dependency-groups] dev` = httpx (for tests) and ruff (linter/formatter). |
+| `scripts/gen-schemas.sh` | Regenerates `app/schemas.py` from the contract. |
+| `pyproject.toml` | Python project definition for uv. `dependencies` = the API layer (FastAPI, uvicorn, python-multipart for uploads, Pydantic, Pillow). `[project.optional-dependencies] ml` = models and agent (numpy, OpenCV, albumentations, anomalib for PatchCore, timm, scikit-learn, sentence-transformers, FAISS, pypdf, openai, LangGraph). `[dependency-groups] dev` = httpx (for tests), ruff (linter/formatter) and datamodel-code-generator (schemas from the contract). |
 | `uv.lock` | Exact versions of every package. Commit it with every dependency change. |
 | `.python-version` | `3.12`: uv downloads and uses this Python version. |
 | `Dockerfile` | CPU / stub image: `python:3.12-slim` + the uv binary, installs only the locked API dependencies (`uv sync --locked --no-dev --no-install-project`), copies the code, runs `uvicorn app.main:app` on port 8000. Dependencies are installed before copying code, so code changes don't reinstall packages. |
@@ -150,16 +151,21 @@ Reads settings from environment variables once, at import:
 - `DEFECT_TYPES`: placeholder list until the dataset is chosen.
 - `MAX_IMAGE_BYTES`: 10 MB upload limit.
 
-### `app/schemas.py`
+### `app/schemas.py` (generated)
 
-Pydantic models that mirror `ml-service.openapi.yaml` one to one: `BoundingBox`,
+**Generated** from `ml-service.openapi.yaml` by `scripts/gen-schemas.sh`
+([datamodel-code-generator](https://github.com/koxudaxi/datamodel-code-generator)), the same way
+the TypeScript types are generated on the other side. Never edit it by hand; CI regenerates it and
+fails if it differs. Models: `BoundingBox`,
 `ModelVersions`, `InspectResult`, `ChatTurn`, `ExplainRequest`, `Source`, `Explanation`,
 `ModelsLoaded`, `Health`, `Error`.
 
 They do two jobs: FastAPI **validates** incoming requests against them (wrong JSON → 400), and
 **serialises** responses through them, so a response can't silently drift from the contract.
 `Literal["none", "low", ...]` restricts a field to fixed values, like an enum.
-`str | None = None` means the field may be missing or null.
+`str | None = None` means the field may be missing. The endpoints use
+`response_model_exclude_none=True`, so fields that are `None` are left out of the JSON instead of
+being sent as `null` (the contract allows optional fields to be absent, not null).
 
 ### `app/stub.py`
 
@@ -328,7 +334,7 @@ Runs on every push to `main` and every pull request. Four independent jobs:
 | Job | Checks |
 | --- | --- |
 | `contracts` | Both OpenAPI files are valid (`openapi-spec-validator`). |
-| `ml-service` | `uv sync --locked` (lock file up to date), ruff lint + format check, then a smoke test: starts the app with FastAPI's `TestClient` in stub mode and calls `/health`, `/inspect` with a generated image, `/explain`. |
+| `ml-service` | `uv sync --locked` (lock file up to date), ruff lint + format check, regenerated `schemas.py` matches the committed one, then a smoke test: starts the app with FastAPI's `TestClient` in stub mode and calls `/health`, `/inspect` with a generated image, `/explain`. |
 | `backend` | `npm ci`, regenerates the types and fails if they differ from the committed ones (`git diff --exit-code`), then `tsc --noEmit`. |
 | `frontend` | `npm ci`, the same generated-types check, then a full production build. |
 
@@ -346,7 +352,7 @@ lint/format issues, and a service that doesn't start.
 
 | Real and working | Placeholder (an issue covers it) |
 | --- | --- |
-| Contracts and generated types | Vision models in `/inspect` (stub) |
+| Contracts, generated TypeScript types and Pydantic models | Vision models in `/inspect` (stub) |
 | ML service API, validation, error shapes | Agent in `/explain` (stub) |
 | Backend → ML call with timeout and error handling | `/health` real model status in the ML service |
 | Database schema | Saving inspections; every backend route except health and the upload spike |

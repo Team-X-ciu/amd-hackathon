@@ -63,7 +63,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Segmentation mask for the overlay */
+        /** Defect mask for the overlay (from the PatchCore heatmap) */
         get: operations["getInspectionMask"];
         put?: never;
         post?: never;
@@ -246,7 +246,18 @@ export interface components {
          * @enum {string}
          */
         InspectionStatus: "inspected" | "explaining" | "explained" | "decided" | "failed";
+        /**
+         * @description Defect classes of VisA pcb1, plus `unknown` when the classifier is not confident.
+         * @enum {string}
+         */
+        DefectType: "bent" | "melt" | "scratch" | "missing" | "unknown";
         /** @enum {string} */
+        PartType: "pcb1";
+        /**
+         * @description none = not defective. `missing` is always high. Other types by defect area:
+         *     < 1% low, 1-5% medium, > 5% high.
+         * @enum {string}
+         */
         Severity: "none" | "low" | "medium" | "high";
         BoundingBox: {
             x: number;
@@ -259,7 +270,7 @@ export interface components {
             anomaly_score: number;
             anomaly_threshold: number;
             is_defective: boolean;
-            defect_type?: string | null;
+            defect_type?: components["schemas"]["DefectType"] | null;
             defect_confidence?: number | null;
             severity: components["schemas"]["Severity"];
             defect_area_ratio?: number | null;
@@ -314,7 +325,7 @@ export interface components {
             id: string;
             status: components["schemas"]["InspectionStatus"];
             line_id?: string;
-            part_type?: string;
+            part_type?: components["schemas"]["PartType"];
             /** @enum {string} */
             source?: "upload" | "simulator";
             /** @example /api/inspections/2b1f.../image */
@@ -338,7 +349,7 @@ export interface components {
             /**
              * @example {
              *       "scratch": 12,
-             *       "crack": 4
+             *       "missing": 4
              *     }
              */
             by_defect_type?: {
@@ -408,7 +419,7 @@ export interface operations {
             query?: {
                 status?: components["schemas"]["InspectionStatus"];
                 defective?: boolean;
-                defect_type?: string;
+                defect_type?: components["schemas"]["DefectType"];
                 line_id?: string;
                 limit?: number;
                 /** @description Value of `next_cursor` from the previous page */
@@ -443,8 +454,7 @@ export interface operations {
                 "multipart/form-data": {
                     /** Format: binary */
                     image: string;
-                    /** @example metal_nut */
-                    part_type?: string;
+                    part_type?: components["schemas"]["PartType"];
                     /** @example line-1 */
                     line_id?: string;
                 };

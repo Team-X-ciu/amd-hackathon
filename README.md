@@ -2,10 +2,10 @@
 
 > Working name — rename when the team picks one.
 
-AI visual inspection for manufacturing lines. A camera image of a part goes through an
-anomaly detector, a segmentation model and a defect classifier; an LLM agent then explains
-the defect from the plant's QC manual and recommends an action. The operator accepts,
-rejects or sends the part to rework.
+AI visual inspection for electronics manufacturing. A camera image of a printed circuit board
+goes through a pretrained anomaly detector (PatchCore), which finds and outlines defects, and a
+defect classifier; an LLM agent then explains the defect from the plant's QC manual and
+recommends an action. The operator accepts, rejects or sends the board to rework.
 
 Built for **AMD Developer Hackathon: ACT III** (lablab.ai), Track 1 — *Intelligent Industry*.
 Models and the LLM run on **AMD GPUs (AMD Developer Cloud, ROCm)**.
@@ -17,9 +17,9 @@ Models and the LLM run on **AMD GPUs (AMD Developer Cloud, ROCm)**.
 
 ```
 Frontend (React)  ──►  Backend (Node/Express)  ──►  ML service (FastAPI, AMD GPU)
-                          │                            ├─ autoencoder  (anomaly gate)
-                          ▼                            ├─ segmentation (defect mask)
-                       Postgres                        ├─ classifier   (defect type)
+                          │                            ├─ PatchCore   (anomaly score + heatmap → mask)
+                          ▼                            ├─ classifier  (defect type, or unknown)
+                       Postgres                        │
                                                        └─ agent: RAG over QC manual + LLM (vLLM)
 ```
 
@@ -42,7 +42,7 @@ contracts/    OpenAPI contracts (source of truth)
 ml-service/   FastAPI + PyTorch (ROCm) models + agent, managed with uv
 backend/      Node + Express + TypeScript, Postgres
 frontend/     React 19 + Vite + TanStack Query + Tailwind + shadcn/ui
-docs/         Plan, tasks, decisions
+docs/         Getting started, code walkthrough, decisions, original plan
 ```
 
 ## Team
@@ -97,9 +97,16 @@ cd backend  && npm run gen:types   # ml-service contract -> src/api/ml-types.ts
 cd frontend && npx openapi-typescript ../contracts/backend.openapi.yaml -o src/api/types.ts
 ```
 
+## Data
+
+[VisA](https://github.com/amazon-science/spot-diff) (Visual Anomaly dataset, Amazon), category
+`pcb1`, licensed **CC BY 4.0**. The data is not included in this repository; see
+[`ml-service/README.md`](ml-service/README.md) for how to download it. Why this dataset and model:
+[`docs/DECISIONS.md`](docs/DECISIONS.md).
+
 ## AMD
 
-- Vision models are trained and served with PyTorch on ROCm (AMD Instinct GPUs, AMD Developer Cloud).
+- Vision models (PatchCore feature extraction, defect classifier) run with PyTorch on ROCm (AMD Instinct GPUs).
 - The LLM is an open model served with vLLM on ROCm, reached through an OpenAI-compatible endpoint.
 - `GET /health` on the ML service reports the GPU in use.
 
@@ -107,8 +114,9 @@ Details: [`ml-service/README.md`](ml-service/README.md).
 
 ## Results
 
-_To be filled in: dataset, held-out test metrics (image AUROC, Dice/IoU, per-class recall)
-against a baseline, and time from detection to decision._
+_To be filled in, on the held-out VisA pcb1 test split: image AUROC and pixel AUROC (PatchCore,
+and the autoencoder baseline if time allows), per-class recall and confusion matrix (classifier),
+agent citation accuracy, and time from detection to decision with and without the tool._
 
 ## License
 

@@ -1,4 +1,7 @@
-# Plan and tasks
+# Plan and tasks (original)
+
+> Superseded by the GitHub issues on the project board and by [`DECISIONS.md`](DECISIONS.md)
+> (VisA pcb1, PatchCore instead of autoencoder + U-Net). Kept for history.
 
 Online build: **12–18 October 2026**. Turn each line into a GitHub issue on the project board.
 Rule: always keep a working end-to-end demo; if time runs out, drop a layer, not the product.
