@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- PatchCore Anomaly Heatmap simulation: Jet colormap (blue -> cyan -> yellow -> red) centered on scratch -->
+  <defs>
+    <radialGradient id="hotspot" cx="60%" cy="49%" r="35%">
+      <stop offset="0%" stop-color="#ff0000" stop-opacity="0.85" />
+      <stop offset="30%" stop-color="#ff9900" stop-opacity="0.75" />
+      <stop offset="55%" stop-color="#ffff00" stop-opacity="0.6" />
+      <stop offset="75%" stop-color="#00ffcc" stop-opacity="0.4" />
+      <stop offset="90%" stop-color="#0066ff" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#000033" stop-opacity="0" />
+    </radialGradient>
+    <filter id="blur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="24" />
+    </filter>
+  </defs>
+  <!-- Background low-level noise -->
+  <rect width="1024" height="1024" fill="#001133" fill-opacity="0.2" />
+  <!-- Hot anomaly peak along the scratch orientation -->
+  <g transform="rotate(112.5 602 497)">
+    <ellipse cx="602" cy="497" rx="140" ry="38" fill="url(#hotspot)" filter="url(#blur)" />
+  </g>
+</svg>
