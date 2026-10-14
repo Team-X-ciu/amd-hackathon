@@ -6,10 +6,16 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, './src') },
+    alias: { '@': path.resolve(import.meta.dirname, './src') },
   },
   server: {
-    // In dev, /api goes to the backend, so no CORS setup is needed
-    proxy: { '/api': 'http://localhost:3000' },
+    // In dev against mock, proxy /api to Prism on port 4010 (or real backend on 3000)
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_URL || 'http://localhost:4010',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ''),
+      },
+    },
   },
 })

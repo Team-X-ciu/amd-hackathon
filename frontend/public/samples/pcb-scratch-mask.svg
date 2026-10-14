@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Sample defect mask for pcb-scratch.jpg: white = defect, black = good (same format as the ML mask). -->
+  <defs>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" />
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="#000" />
+  <ellipse cx="602" cy="497" rx="122" ry="16" fill="#fff" filter="url(#soft)" transform="rotate(112.5 602 497)" />
+</svg>
