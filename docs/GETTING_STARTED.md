@@ -18,7 +18,7 @@ Read this once on day one. It takes about 20 minutes, then you can build.
 An operator on a factory line uploads (or the camera sends) an image of a part. The app:
 
 1. **Inspects it** — ML models decide if the part is defective, mark *where* the defect is
-   (a mask) and *what* it is (scratch, crack…).
+   (a mask) and *what* it is (bent, melt, scratch, missing component…).
 2. **Explains it** — an AI agent reads the plant's QC manual and says what probably caused the
    defect and what to do, citing the manual section.
 3. **Records the decision** — the operator accepts, rejects or sends the part to rework.
@@ -185,13 +185,14 @@ POST /inspections/{id}/decision ─► saves decision
 | --- | --- |
 | **Frontend** | Generate types from `backend.openapi.yaml`. Build against a mock server until the backend is ready. |
 | **Backend** | Implement `backend.openapi.yaml` exactly. Generate types from both files; use the ML types to call the ML service. |
-| **ML** | Implement `ml-service.openapi.yaml` exactly. The Pydantic models in `ml-service/app/schemas.py` mirror it. |
+| **ML** | Implement `ml-service.openapi.yaml` exactly. The Pydantic models in `ml-service/app/schemas.py` are generated from it. |
 
 **Generate types** (run after every contract change):
 
 ```bash
 cd backend  && npm run gen:types   # → src/api/types.ts and src/api/ml-types.ts
 cd frontend && npm run gen:types   # → src/api/types.ts
+cd ml-service && ./scripts/gen-schemas.sh   # → app/schemas.py (Pydantic)
 ```
 
 Never edit the generated files by hand. CI fails if they don't match the contracts.
@@ -317,21 +318,23 @@ You wrote them, so you keep them right. In practice:
    optional where it can be?
 4. **Keep your service honest.** When you replace the stub with real models, the response must
    keep the same shape. Two checks:
-   - FastAPI publishes what your code actually returns at http://localhost:8000/openapi.json.
-     Compare its `InspectResult` and `Explanation` with the contract when you change `schemas.py`.
+   - `app/schemas.py` is generated from the contract, so the response models can't drift;
+     CI checks it. What can still go wrong is the *values* (e.g. a model returning a defect type
+     that isn't in the enum), which Pydantic rejects at runtime.
    - Later: add [Schemathesis](https://schemathesis.readthedocs.io/) to CI. It calls the running
      service using the contract and fails if any response doesn't match.
 
 ### Your build order
 
-1. **Dataset** — MVTec AD fits all three models (good-only training images for the autoencoder,
-   masks and defect types for testing). Check the licence; never commit the data.
+1. **Dataset** — VisA `pcb1` (see [`DECISIONS.md`](DECISIONS.md)): download on the GPU machine,
+   keep the original masks for the defect types, never commit the data.
 2. **AMD** — GPU instance on AMD Developer Cloud; check `torch.version.hip` (see
    [`ml-service/README.md`](../ml-service/README.md)). Use `Dockerfile.rocm`, not
    `uv sync --extra ml`, on the GPU machine.
 3. **vLLM** — serve an open model (e.g. Qwen2.5-7B-Instruct) with the ROCm vLLM image; one test call.
-4. **Classifier first** — it's enough for a complete demo with the agent. Then segmentation, then
-   the autoencoder gate. Report each model against a baseline on a held-out test set.
+4. **PatchCore, then the classifier** — PatchCore gives detection and the mask; the classifier on
+   pretrained features gives the defect type. Report both on the held-out test split; the
+   autoencoder is an optional baseline.
 5. **Agent** — RAG over `ml-service/manuals/` + LangGraph, behind `/explain`.
 
 Switch from stub to real per endpoint: keep `ML_STUB=1` until a model is ready, so teammates are

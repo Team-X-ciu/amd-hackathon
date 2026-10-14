@@ -11,14 +11,16 @@ These two files are the source of truth for how the three parts talk to each oth
 
 1. Change a contract **before** changing code, in its own pull request.
 2. All three people review contract PRs.
-3. After a change, regenerate types on the consuming side and fix the compile errors.
+3. After a change, regenerate on both sides and fix what breaks: `npm run gen:types` (backend, frontend) and `./scripts/gen-schemas.sh` (ml-service).
 4. Prefer adding optional fields over renaming or removing fields.
 
 ## Open decisions
 
-- [ ] Final `defect_type` list — depends on the dataset. Fill in here and in both contracts as an `enum`.
-- [ ] `part_type` values (one product or several).
-- [ ] Severity thresholds (area ratio → low / medium / high).
+- [x] `defect_type`: `bent`, `melt`, `scratch`, `missing`, `unknown` (VisA pcb1), an `enum` in both contracts
+- [x] `part_type`: `pcb1`
+- [x] Severity: `missing` always high; otherwise by area, < 1% low, 1–5% medium, > 5% high
+
+See [`docs/DECISIONS.md`](../docs/DECISIONS.md).
 
 ## Validate
 

@@ -11,8 +11,12 @@ MANUALS_DIR = os.getenv("MANUALS_DIR", "manuals")
 
 ANOMALY_THRESHOLD = float(os.getenv("ANOMALY_THRESHOLD", "0.5"))
 
-# Placeholder list. Replace with the real classes of the chosen dataset
-# and update both contracts (see contracts/README.md, "Open decisions").
-DEFECT_TYPES = ["scratch", "crack", "dent", "contamination", "color"]
+# Dataset: VisA (Amazon), category pcb1, CC BY 4.0. Must match the DefectType / PartType enums
+# in contracts/ml-service.openapi.yaml.
+PART_TYPE = "pcb1"
+DEFECT_TYPES = ["bent", "melt", "scratch", "missing"]  # plus "unknown" when the classifier is unsure
+
+# Below this classifier confidence the defect type is reported as "unknown".
+CLASSIFIER_MIN_CONFIDENCE = float(os.getenv("CLASSIFIER_MIN_CONFIDENCE", "0.6"))
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024

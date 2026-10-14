@@ -2,7 +2,8 @@
 
 Source documents for the agent's RAG index (Markdown, text or PDF).
 
-Write or collect **one section per defect type**, each with:
+Write or collect **one section per defect type** of VisA pcb1 (`bent`, `melt`, `scratch`,
+`missing`) plus one for `unknown` defects, each with:
 
 - what the defect looks like
 - likely causes on the line

@@ -22,7 +22,7 @@ ml = [
     "numpy",
     "opencv-python-headless",
     "albumentations",
-    "segmentation-models-pytorch",
+    "anomalib",                    # PatchCore anomaly detection
     "timm",
     "scikit-learn",
     "sentence-transformers",
@@ -33,7 +33,11 @@ ml = [
 ]
 
 [dependency-groups]
-dev = ["httpx", "ruff"]
+dev = [
+    "datamodel-code-generator>=0.83.0",
+    "httpx",
+    "ruff",
+]
 
 [tool.uv]
 package = false

@@ -26,6 +26,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked
       - run: uv run ruff check app && uv run ruff format --check app
+      - name: Generated schemas match the contract
+        run: ./scripts/gen-schemas.sh && git diff --exit-code app/schemas.py
       - name: Smoke test stub mode
         env:
           ML_STUB: "1"

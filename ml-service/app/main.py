@@ -5,7 +5,7 @@ Stateless: no database. Called only by the backend.
 """
 
 import io
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -15,6 +15,8 @@ from PIL import Image, UnidentifiedImageError
 from . import config, stub
 from .schemas import Error, ExplainRequest, Explanation, Health, InspectResult, ModelsLoaded
 
+# Responses leave out fields that are None: the contract allows optional fields to be
+# absent, but not to be null unless it says so.
 app = FastAPI(
     title="ML Service (FastAPI)",
     version="0.1.0",
@@ -47,13 +49,13 @@ async def http_error(_, exc: HTTPException):
     return JSONResponse(status_code=exc.status_code, content=Error(error=str(exc.detail)).model_dump())
 
 
-@app.get("/health", response_model=Health)
+@app.get("/health", response_model=Health, response_model_exclude_none=True)
 def health() -> Health:
     if config.STUB:
-        loaded = ModelsLoaded(autoencoder=True, segmentation=True, classifier=True, llm_reachable=True)
+        loaded = ModelsLoaded(anomaly_detector=True, classifier=True, llm_reachable=True)
     else:
         # TODO: report real model / LLM status
-        loaded = ModelsLoaded(autoencoder=False, segmentation=False, classifier=False, llm_reachable=False)
+        loaded = ModelsLoaded(anomaly_detector=False, classifier=False, llm_reachable=False)
     status = "ok" if all(loaded.model_dump().values()) else "degraded"
     return Health(status=status, models_loaded=loaded, device=_device(), stub=config.STUB)
 
@@ -61,11 +63,12 @@ def health() -> Health:
 @app.post(
     "/inspect",
     response_model=InspectResult,
+    response_model_exclude_none=True,
     responses={400: {"model": Error}, 500: {"model": Error}},
 )
 async def inspect(
     image: Annotated[UploadFile, File(description="PNG or JPEG of one part")],
-    part_type: Annotated[str | None, Form()] = None,
+    part_type: Annotated[Literal["pcb1"] | None, Form()] = None,
 ) -> InspectResult:
     raw = await image.read()
     if len(raw) > config.MAX_IMAGE_BYTES:
@@ -78,13 +81,14 @@ async def inspect(
     if config.STUB:
         return stub.inspect(img, raw)
 
-    # TODO: autoencoder gate -> segmentation + classification
+    # TODO: PatchCore (anomaly score + heatmap -> mask) -> classifier on pretrained features
     raise HTTPException(500, "Models not loaded yet; run with ML_STUB=1")
 
 
 @app.post(
     "/explain",
     response_model=Explanation,
+    response_model_exclude_none=True,
     responses={400: {"model": Error}, 503: {"model": Error}},
 )
 def explain(req: ExplainRequest) -> Explanation:

@@ -5,7 +5,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
       POSTGRES_DB: ${POSTGRES_DB:-inspections}
-    ports: ["5432:5432"]
+    ports: ["${POSTGRES_PORT:-5432}:5432"]   # host port; change POSTGRES_PORT in .env if 5432 is taken
     volumes:
       - db-data:/var/lib/postgresql/data
       - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -22,7 +22,7 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-http://localhost:8001/v1}
       LLM_API_KEY: ${LLM_API_KEY:-not-needed-for-vllm}
       LLM_MODEL: ${LLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
-    ports: ["8000:8000"]
+    ports: ["${ML_PORT:-8000}:8000"]
     volumes:
       - ./ml-service/models:/app/models
       - ./ml-service/manuals:/app/manuals
@@ -34,7 +34,7 @@ services:
       ML_SERVICE_URL: ${ML_SERVICE_URL:-http://ml-service:8000}
       ML_TIMEOUT_MS: ${ML_TIMEOUT_MS:-30000}
       PORT: 3000
-    ports: ["3000:3000"]
+    ports: ["${BACKEND_PORT:-3000}:3000"]
     depends_on:
       db:
         condition: service_healthy
@@ -46,7 +46,7 @@ services:
       context: ./frontend
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
-    ports: ["5173:80"]
+    ports: ["${FRONTEND_PORT:-5173}:80"]
     depends_on: [backend]
 
 volumes:

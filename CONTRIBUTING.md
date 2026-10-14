@@ -43,16 +43,16 @@ abror/chore/amd-rocm-setup
 [Conventional Commits](https://www.conventionalcommits.org/) format, with the area in brackets:
 
 ```
-<type>(<area>)/<what changed>
+<type>(<area>): <what changed>
 ```
 
 Areas: `ml`, `backend`, `frontend`, `contracts`, `infra`, `docs`.
 
 ```
-feat(ml)/add autoencoder anomaly gate
-fix(backend)/handle ML service timeout on /explain
-docs(contracts)/add defect_type enum
-chore(infra)/add Postgres healthcheck to compose
+feat(ml): add PatchCore anomaly detection
+fix(backend): handle ML service timeout on /explain
+docs(contracts): add defect_type enum
+chore(infra): add Postgres healthcheck to compose
 ```
 
 Small, focused commits. Present tense, lowercase, no full stop.
@@ -77,7 +77,7 @@ git push -u origin <branch-name>
 
 Then open a PR into `main` on GitHub.
 
-- **Title:** issue number first, then what it does: `Closes #24 - Add classifier training on MVTec AD`.
+- **Title:** issue number first, then what it does: `Closes #24 - Add defect classifier on VisA pcb1`.
   GitHub copies the title into the merge commit, so the issue closes when the PR is merged.
   `Fixes #` and `Resolves #` work too.
 - Keep PRs small. Merge at least once a day; don't sit on a branch for days.

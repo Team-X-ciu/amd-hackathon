@@ -66,7 +66,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @enum {string} */
+        /**
+         * @description Defect classes of VisA pcb1, plus `unknown` when the classifier is not confident
+         *     (the case then also gets needs_human_review).
+         * @enum {string}
+         */
+        DefectType: "bent" | "melt" | "scratch" | "missing" | "unknown";
+        /**
+         * @description Product being inspected. One product for the hackathon.
+         * @enum {string}
+         */
+        PartType: "pcb1";
+        /**
+         * @description none = not defective. `missing` is always high (a missing component means a dead board).
+         *     Other defect types by defect_area_ratio: < 0.01 low, 0.01-0.05 medium, > 0.05 high.
+         * @enum {string}
+         */
         Severity: "none" | "low" | "medium" | "high";
         BoundingBox: {
             /** @description Left */
@@ -77,57 +92,49 @@ export interface components {
             height: number;
         };
         ModelVersions: {
-            /** @example ae-v1 */
-            autoencoder?: string;
-            /** @example unet-r34-v1 */
-            segmentation?: string;
-            /** @example resnet18-v1 */
+            /** @example patchcore-wrn50-v1 */
+            anomaly_detector?: string;
+            /** @example logreg-wrn50-v1 */
             classifier?: string;
             /** @example Qwen2.5-7B-Instruct */
             llm?: string;
         };
         InspectResult: {
             /**
-             * @description Autoencoder reconstruction error, normalised to 0-1
+             * @description PatchCore anomaly score for the image, normalised to 0-1
              * @example 0.87
              */
             anomaly_score: number;
             /** @example 0.5 */
             anomaly_threshold: number;
             is_defective: boolean;
-            /**
-             * @description Null when not defective. Final list depends on the dataset;
-             *     agree it on day one (e.g. scratch, crack, dent, contamination, color).
-             * @example scratch
-             */
-            defect_type?: string | null;
+            /** @description Null when not defective. */
+            defect_type?: components["schemas"]["DefectType"] | null;
             /** @example 0.92 */
             defect_confidence?: number | null;
             severity: components["schemas"]["Severity"];
             /**
-             * @description Fraction of the part's pixels covered by the mask (0-1)
+             * @description Fraction of the image's pixels covered by the defect mask (0-1)
              * @example 0.031
              */
             defect_area_ratio?: number | null;
             bounding_boxes?: components["schemas"]["BoundingBox"][];
-            /** @description Binary mask, same size as input, base64-encoded PNG. Null when not defective. */
+            /** @description Binary defect mask (thresholded PatchCore heatmap), same size as input, base64 PNG. Null when not defective. */
             mask_png_base64?: string | null;
-            /** @description Optional autoencoder error heatmap for the UI overlay */
+            /** @description Optional PatchCore anomaly heatmap (grayscale PNG, base64) for the UI overlay */
             heatmap_png_base64?: string | null;
             model_versions: components["schemas"]["ModelVersions"];
             /** @example 240 */
             latency_ms: number;
         };
         ExplainRequest: {
-            /** @example scratch */
-            defect_type: string;
+            defect_type: components["schemas"]["DefectType"];
             severity: components["schemas"]["Severity"];
             /** @example 0.87 */
             anomaly_score?: number;
             /** @example 0.031 */
             defect_area_ratio?: number;
-            /** @example metal_nut */
-            part_type?: string;
+            part_type?: components["schemas"]["PartType"];
             /**
              * @description Operator follow-up question; null for the first explanation
              * @example Can this part be reworked?
@@ -144,22 +151,22 @@ export interface components {
         Source: {
             /** @example QC Manual v1 */
             document: string;
-            /** @example 4.2 Surface scratches */
+            /** @example 3 Scratch */
             section: string;
             /** @description Short retrieved passage shown to the operator */
             snippet?: string;
         };
         Explanation: {
-            /** @example Linear scratch on the outer face, about 3% of the surface. */
+            /** @example Scratch across two traces near the connector, about 2% of the board. */
             summary: string;
             /**
              * @example [
-             *       "Worn guide roller",
-             *       "Debris on conveyor"
+             *       "Board scraped by the handling fixture",
+             *       "Debris on the conveyor"
              *     ]
              */
             likely_causes?: string[];
-            /** @example Reject the part and inspect roller 3 before the next batch. */
+            /** @example Send the board to rework and check the handling fixture before the next batch. */
             recommended_action: string;
             /** @enum {string} */
             priority: "low" | "medium" | "high" | "stop_line";
@@ -177,10 +184,9 @@ export interface components {
             /** @enum {string} */
             status: "ok" | "degraded";
             models_loaded: {
-                autoencoder?: boolean;
-                segmentation?: boolean;
-                classifier?: boolean;
-                llm_reachable?: boolean;
+                anomaly_detector: boolean;
+                classifier: boolean;
+                llm_reachable: boolean;
             };
             /** @description e.g. "cuda:0 (AMD Instinct MI300X, ROCm)" -- useful to show AMD usage in the demo */
             device?: string;
@@ -254,11 +260,7 @@ export interface operations {
                      * @description PNG or JPEG of one part
                      */
                     image: string;
-                    /**
-                     * @description Product/category, e.g. "metal_nut". Optional if a single product is used.
-                     * @example metal_nut
-                     */
-                    part_type?: string;
+                    part_type?: components["schemas"]["PartType"];
                 };
             };
         };

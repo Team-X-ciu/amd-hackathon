@@ -7,9 +7,12 @@ info:
     never by the frontend. Stateless: no database, image in -> result out.
     Runs on AMD Developer Cloud (models on ROCm, LLM served via vLLM).
 
+    Data: VisA (Amazon), category pcb1, CC BY 4.0.
+
     Pipeline for /inspect:
-      1. Autoencoder anomaly gate (trained on good parts only)
-      2. If anomalous: segmentation (mask) + classification (defect type)
+      1. PatchCore anomaly detection (anomalib): pretrained WideResNet-50 features compared with a
+         memory bank of good boards -> anomaly score + heatmap; the thresholded heatmap is the mask.
+      2. If anomalous: defect classifier on pretrained features -> defect type, or `unknown`.
     /explain runs the LLM agent with RAG over the QC manual.
 servers:
   - url: http://localhost:8000
@@ -51,9 +54,7 @@ paths:
                   format: binary
                   description: PNG or JPEG of one part
                 part_type:
-                  type: string
-                  description: Product/category, e.g. "metal_nut". Optional if a single product is used.
-                  example: metal_nut
+                  $ref: "#/components/schemas/PartType"
       responses:
         "200":
           description: Inspection result
@@ -111,8 +112,23 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    DefectType:
+      type: string
+      description: |
+        Defect classes of VisA pcb1, plus `unknown` when the classifier is not confident
+        (the case then also gets needs_human_review).
+      enum: [bent, melt, scratch, missing, unknown]
+
+    PartType:
+      type: string
+      description: Product being inspected. One product for the hackathon.
+      enum: [pcb1]
+
     Severity:
       type: string
+      description: |
+        none = not defective. `missing` is always high (a missing component means a dead board).
+        Other defect types by defect_area_ratio: < 0.01 low, 0.01-0.05 medium, > 0.05 high.
       enum: [none, low, medium, high]
 
     BoundingBox:
@@ -127,9 +143,8 @@ components:
     ModelVersions:
       type: object
       properties:
-        autoencoder: { type: string, example: ae-v1 }
-        segmentation: { type: string, example: unet-r34-v1 }
-        classifier: { type: string, example: resnet18-v1 }
+        anomaly_detector: { type: string, example: patchcore-wrn50-v1 }
+        classifier: { type: string, example: logreg-wrn50-v1 }
         llm: { type: string, example: Qwen2.5-7B-Instruct }
 
     InspectResult:
@@ -144,7 +159,7 @@ components:
       properties:
         anomaly_score:
           type: number
-          description: Autoencoder reconstruction error, normalised to 0-1
+          description: PatchCore anomaly score for the image, normalised to 0-1
           example: 0.87
         anomaly_threshold:
           type: number
@@ -152,11 +167,10 @@ components:
         is_defective:
           type: boolean
         defect_type:
-          type: [string, "null"]
-          description: |
-            Null when not defective. Final list depends on the dataset;
-            agree it on day one (e.g. scratch, crack, dent, contamination, color).
-          example: scratch
+          description: Null when not defective.
+          anyOf:
+            - $ref: "#/components/schemas/DefectType"
+            - type: "null"
         defect_confidence:
           type: [number, "null"]
           example: 0.92
@@ -164,7 +178,7 @@ components:
           $ref: "#/components/schemas/Severity"
         defect_area_ratio:
           type: [number, "null"]
-          description: Fraction of the part's pixels covered by the mask (0-1)
+          description: Fraction of the image's pixels covered by the defect mask (0-1)
           example: 0.031
         bounding_boxes:
           type: array
@@ -172,10 +186,10 @@ components:
             $ref: "#/components/schemas/BoundingBox"
         mask_png_base64:
           type: [string, "null"]
-          description: Binary mask, same size as input, base64-encoded PNG. Null when not defective.
+          description: Binary defect mask (thresholded PatchCore heatmap), same size as input, base64 PNG. Null when not defective.
         heatmap_png_base64:
           type: [string, "null"]
-          description: Optional autoencoder error heatmap for the UI overlay
+          description: Optional PatchCore anomaly heatmap (grayscale PNG, base64) for the UI overlay
         model_versions:
           $ref: "#/components/schemas/ModelVersions"
         latency_ms:
@@ -186,12 +200,14 @@ components:
       type: object
       required: [defect_type, severity]
       properties:
-        defect_type: { type: string, example: scratch }
+        defect_type:
+          $ref: "#/components/schemas/DefectType"
         severity:
           $ref: "#/components/schemas/Severity"
         anomaly_score: { type: number, example: 0.87 }
         defect_area_ratio: { type: number, example: 0.031 }
-        part_type: { type: string, example: metal_nut }
+        part_type:
+          $ref: "#/components/schemas/PartType"
         question:
           type: [string, "null"]
           description: Operator follow-up question; null for the first explanation
@@ -214,7 +230,7 @@ components:
       required: [document, section]
       properties:
         document: { type: string, example: QC Manual v1 }
-        section: { type: string, example: "4.2 Surface scratches" }
+        section: { type: string, example: "3 Scratch" }
         snippet: { type: string, description: Short retrieved passage shown to the operator }
 
     Explanation:
@@ -228,14 +244,14 @@ components:
       properties:
         summary:
           type: string
-          example: Linear scratch on the outer face, about 3% of the surface.
+          example: Scratch across two traces near the connector, about 2% of the board.
         likely_causes:
           type: array
           items: { type: string }
-          example: [Worn guide roller, Debris on conveyor]
+          example: [Board scraped by the handling fixture, Debris on the conveyor]
         recommended_action:
           type: string
-          example: Reject the part and inspect roller 3 before the next batch.
+          example: Send the board to rework and check the handling fixture before the next batch.
         priority:
           type: string
           enum: [low, medium, high, stop_line]
@@ -263,9 +279,9 @@ components:
         status: { type: string, enum: [ok, degraded] }
         models_loaded:
           type: object
+          required: [anomaly_detector, classifier, llm_reachable]
           properties:
-            autoencoder: { type: boolean }
-            segmentation: { type: boolean }
+            anomaly_detector: { type: boolean }
             classifier: { type: boolean }
             llm_reachable: { type: boolean }
         device:
