@@ -4,6 +4,7 @@ import express, { type Request, type Response } from "express";
 import multer from "multer";
 
 import { sql } from "./db.js";
+import { docsRouter } from "./docs.js";
 import { MlError, mlHealth, mlInspect } from "./ml-client.js";
 
 const app = express();
@@ -61,6 +62,7 @@ api.post("/simulator/stop", todo);
 api.get("/events", todo);
 
 app.use("/api", api);
+app.use(docsRouter()); // http://localhost:3000/docs
 
 const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => console.log(`backend listening on :${port}`));

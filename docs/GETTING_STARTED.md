@@ -124,6 +124,7 @@ Check it works:
 | --- | --- |
 | http://localhost:5173 | the upload screen; upload any PNG/JPEG → a result appears |
 | http://localhost:3000/api/health | `"ml_service": "ok"` |
+| http://localhost:3000/docs | the backend's interactive API docs (from the contract) |
 | http://localhost:8000/docs | the ML service's interactive API docs |
 
 The ML service runs in **stub mode**: it returns fake but realistic results, so nobody waits for
