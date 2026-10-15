@@ -2,13 +2,23 @@
 import cors from "cors";
 import express, { type Request, type Response } from "express";
 import multer from "multer";
+import fs from "fs/promises";
 
 import { sql } from "./db.js";
 import { docsRouter } from "./docs.js";
 import { MlError, mlHealth, mlInspect } from "./ml-client.js";
 
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "/app/uploads"); // inside container, mapped to backend/uploads
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + "-" + file.originalname); // unique filename
+  },
+});
+
 const app = express();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 const api = express.Router();
 
 app.use(cors());
@@ -38,8 +48,14 @@ api.get("/health", async (_req: Request, res: Response) => {
 api.post("/inspections", upload.single("image"), async (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ error: "image is required" });
   try {
-    const vision = await mlInspect(req.file.buffer, req.file.originalname, req.file.mimetype, req.body.part_type);
-    res.status(201).json({ vision });
+     // Read the file back into a buffer if mlInspect requires it
+    const buffer = await fs.readFile(req.file.path);
+    const vision = await mlInspect(buffer, req.file.originalname, req.file.mimetype, req.body.part_type);
+    res.status(201).json({
+      vision,
+      file: req.file.filename,
+      path: req.file.path,
+    });
   } catch (e) {
     const status = e instanceof MlError ? 502 : 500;
     res.status(status).json({ error: "ML service failed", detail: String(e) });

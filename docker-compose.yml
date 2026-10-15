@@ -38,6 +38,7 @@ services:
     ports: ["${BACKEND_PORT:-3000}:3000"]
     volumes:
       - ./contracts:/contracts:ro
+      - ./backend/uploads:/app/uploads 
     depends_on:
       db:
         condition: service_healthy
