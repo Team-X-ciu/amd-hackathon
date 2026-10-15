@@ -1,0 +1,2 @@
+date,commit,run,split,seed,metrics
+2026-10-15T08:59:10+00:00,6daeb3c,dummy_most_frequent,val,42,"{""accuracy"": 0.5, ""macro_f1"": 0.167, ""n"": 50}"
