@@ -19,9 +19,9 @@ services:
     build: ./ml-service
     environment:
       ML_STUB: ${ML_STUB:-1}
-      LLM_BASE_URL: ${LLM_BASE_URL:-http://localhost:8001/v1}
-      LLM_API_KEY: ${LLM_API_KEY:-not-needed-for-vllm}
-      LLM_MODEL: ${LLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      LLM_BASE_URL: ${LLM_BASE_URL}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-Gemma-4-31B-IT}
     ports: ["${ML_PORT:-8000}:8000"]
     volumes:
       - ./ml-service/models:/app/models
