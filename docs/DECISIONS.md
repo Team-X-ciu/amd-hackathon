@@ -104,3 +104,16 @@ called through its OpenAI-compatible API (`LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_
 - The API key lives only in `.env`, never in the repo; `.env.example` lists the variable names.
 - Usage is metered: check Model Usage in Token Factory before the demo.
 - The vision model (PatchCore) runs separately; where it runs is recorded with issue #6.
+
+## 6. Data findings for pcb1 (15 Oct 2026, issue #7)
+
+Correction to entry 1, from the actual masks (`ml-service/scripts/make_split.py`):
+- **Per-type counts are unbalanced, not ~25 each:** melt 50, missing 20, bent 15, scratch 15
+  (9 boards have several types; the type with the most mask pixels wins).
+- **Split:** train = VisA's official 904 good boards; the official test set (100 good + 100 defective)
+  is split 50/50 into val/test, stratified by type, seed 42 → bent and scratch have only 7–8 boards
+  per half, so per-type results are noisy. The classifier is judged by **macro-F1** (baseline: always
+  "melt").
+- **Defects are tiny:** median 0.2% of the image, 90th percentile 2.1%. With the 1% / 5% rule from
+  entry 3 almost every board would be "low". New severity thresholds will be set on the **val** split
+  using PatchCore's predicted masks (with the real `/inspect`).
