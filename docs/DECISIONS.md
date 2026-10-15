@@ -81,3 +81,26 @@ for the LLM.
 a slow or failed agent never blocks the inspection; the `explaining` status and events already
 existed in the contract. No job queue: a background promise in the backend is enough for the demo
 (an explanation in progress is lost if the backend restarts — acceptable this week).
+
+## 5. Agent LLM: Gemma via AMD Token Factory (15 Oct 2026, issue #17)
+
+**Chosen:** `Gemma-4-31B-IT` served by **AMD Token Factory** (notebooks.amd.com/tokenfactory),
+called through its OpenAI-compatible API (`LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`).
+
+**Considered:**
+- **Self-hosted vLLM on AMD Developer Cloud** (the original plan): full control and a strong
+  "we run it on ROCm" story, but it needs credits (2–3 days to arrive) or a card, plus a day of
+  setup (ROCm image, GPU memory settings, private port).
+- **Qwen2.5-7B-Instruct**: the original default model; smaller and not eligible for the Google prize.
+
+**Why:**
+- The organizers confirmed that ACT III runs on Token Factory and that the API key is all you need
+  to participate (lablab Discord, 14 Oct 2026).
+- The model runs on AMD GPUs with no infrastructure for us to manage, which leaves time for the agent itself.
+- Gemma is Google DeepMind's model: building with it makes us eligible for the Google prize.
+- First test completion worked (15 Oct).
+
+**Consequences:**
+- The API key lives only in `.env`, never in the repo; `.env.example` lists the variable names.
+- Usage is metered: check Model Usage in Token Factory before the demo.
+- The vision model (PatchCore) runs separately; where it runs is recorded with issue #6.
