@@ -20,9 +20,11 @@ dependencies = [
 # so the image's ROCm torch is kept. See README, "Run on AMD Developer Cloud".
 ml = [
     "numpy",
+    "torch",                       # PatchCore (app/patchcore.py): our own implementation
+    "torchvision",                 # WideResNet-50 backbone
+    "scipy",                       # connected regions -> boxes
     "opencv-python-headless",
     "albumentations",
-    "anomalib",                    # PatchCore anomaly detection
     "timm",
     "scikit-learn",
     "sentence-transformers",
