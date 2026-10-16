@@ -1,6 +1,10 @@
 import os
 
+# ML_STUB sets both endpoints; ML_STUB_INSPECT / ML_STUB_EXPLAIN override one each.
+# Typical demo until the agent exists: ML_STUB_INSPECT=0 ML_STUB_EXPLAIN=1 (real vision, fake explanation).
 STUB = os.getenv("ML_STUB", "1") == "1"
+STUB_INSPECT = os.getenv("ML_STUB_INSPECT", "1" if STUB else "0") == "1"
+STUB_EXPLAIN = os.getenv("ML_STUB_EXPLAIN", "1" if STUB else "0") == "1"
 
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:8001/v1")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "not-needed-for-vllm")
