@@ -41,7 +41,7 @@ class InspectResult(BaseModel):
     severity: Literal["none", "low", "medium", "high"]
     """
     none = not defective. `missing` is always high (a missing component means a dead board).
-    Other defect types by defect_area_ratio: < 0.01 low, 0.01-0.05 medium, > 0.05 high.
+    Other defect types by defect_area_ratio: < 0.01 low, 0.01-0.03 medium, > 0.03 high (predicted mask area; set on val, DECISIONS 7).
 
     """
     defect_area_ratio: float | None = Field(None, examples=[0.031])
@@ -136,7 +136,7 @@ class ExplainRequest(BaseModel):
     severity: Literal["none", "low", "medium", "high"]
     """
     none = not defective. `missing` is always high (a missing component means a dead board).
-    Other defect types by defect_area_ratio: < 0.01 low, 0.01-0.05 medium, > 0.05 high.
+    Other defect types by defect_area_ratio: < 0.01 low, 0.01-0.03 medium, > 0.03 high (predicted mask area; set on val, DECISIONS 7).
 
     """
     anomaly_score: float | None = Field(None, examples=[0.87])

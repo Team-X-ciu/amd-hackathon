@@ -58,7 +58,7 @@ use `anomaly_detector` + `classifier` instead of `autoencoder` + `segmentation`.
 
 - not defective → `none`
 - `missing` → always `high` (a missing component means a dead board)
-- other types by defect area: under 1% `low`, 1–5% `medium`, over 5% `high`
+- other types by defect area: under 1% `low`, 1–5% `medium`, over 5% `high` (replaced by entry 7: 1% / 3% on the predicted area)
 - defective but no area measured → `medium`
 
 Implemented once in `ml-service/app/severity.py`, used by the stub and the real pipeline.
@@ -117,3 +117,15 @@ Correction to entry 1, from the actual masks (`ml-service/scripts/make_split.py`
 - **Defects are tiny:** median 0.2% of the image, 90th percentile 2.1%. With the 1% / 5% rule from
   entry 3 almost every board would be "low". New severity thresholds will be set on the **val** split
   using PatchCore's predicted masks (with the real `/inspect`).
+
+## 7. Severity cut-offs from predicted masks (16 Oct 2026, issue #10)
+
+`defect_area_ratio` comes from PatchCore's mask, which is blurrier and larger than the real defect
+(Anomaly/000: 1.6% predicted). So the cut-offs are set on what `/inspect` actually measures:
+`ml-service/scripts/severity_cutoffs.py` splits the predicted area of the 48 defective val boards
+PatchCore catches into thirds (0.97% / 3.21%), rounded to **under 1% `low`, 1–3% `medium`, over 3% `high`**.
+
+- Predicted area by true type (val median): scratch 0.7%, melt 1.3%, bent 4.4%, missing 10.8%,
+  so size alone already ranks the types sensibly; `missing` stays always `high` once #9 names it.
+- False alarms are small: none of the 9 on val (or 4 on test) lands in `high`.
+- Test, counted once (unrounded cut-offs): 9 low / 20 medium / 16 high on caught defective boards.
