@@ -22,11 +22,12 @@ log = logging.getLogger("uvicorn.error")
 
 # Loaded once at startup when /inspect is real (ML_STUB_INSPECT=0); None in stub mode or if loading failed.
 detector = None
+classifier = None  # optional: without it, defect_type is "unknown"
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global detector
+    global detector, classifier
     if not config.STUB_INSPECT:
         try:
             from .patchcore import PatchCore  # torch import only in real mode
@@ -36,6 +37,17 @@ async def lifespan(_: FastAPI):
             log.info("PatchCore loaded: %s on %s", detector.version, detector.device)
         except Exception as e:  # noqa: BLE001 -- keep serving /health so the failure is visible
             log.error("PatchCore failed to load from %s: %s", config.MODELS_DIR, e)
+        if detector is not None:
+            try:
+                from .classifier import DefectClassifier
+
+                classifier = DefectClassifier(config.MODELS_DIR, detector.features, detector.device)
+                classifier.classify(Image.new("RGB", (64, 64)), (0, 0, 16, 16))  # warm-up
+                log.info(
+                    "Classifier loaded: %s, unknown below %.2f", classifier.version, classifier.unknown_below
+                )
+            except Exception as e:  # noqa: BLE001 -- PatchCore still works; type is "unknown"
+                log.error("Classifier failed to load from %s: %s", config.MODELS_DIR, e)
     yield
 
 
@@ -76,10 +88,10 @@ async def http_error(_, exc: HTTPException):
 
 @app.get("/health", response_model=Health, response_model_exclude_none=True)
 def health() -> Health:
-    # Stubbed parts count as loaded. TODO: classifier (#9) and real LLM status
+    # Stubbed parts count as loaded. TODO: real LLM status
     loaded = ModelsLoaded(
         anomaly_detector=config.STUB_INSPECT or detector is not None,
-        classifier=config.STUB_INSPECT,
+        classifier=config.STUB_INSPECT or classifier is not None,
         llm_reachable=config.STUB_EXPLAIN,
     )
     status = "ok" if all(loaded.model_dump().values()) else "degraded"
@@ -114,7 +126,7 @@ async def inspect(
     from . import pipeline
 
     # torch work is blocking: run it in a worker thread so the event loop stays free
-    return await run_in_threadpool(pipeline.inspect, img, detector)
+    return await run_in_threadpool(pipeline.inspect, img, detector, classifier)
 
 
 @app.post(
