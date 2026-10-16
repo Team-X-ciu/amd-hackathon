@@ -40,3 +40,4 @@ ml-service/index/
 
 # Runtime uploads
 backend/uploads/
+ml-service/out/
