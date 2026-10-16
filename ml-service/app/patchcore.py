@@ -35,6 +35,7 @@ class Detection:
     mask: np.ndarray | None = None  # bool, original image size (H x W); None if good
     heatmap: np.ndarray = field(repr=False, default=None)  # uint8, original size
     boxes: list[tuple[int, int, int, int]] = field(default_factory=list)  # (x, y, w, h), original px
+    main_box: tuple[int, int, int, int] | None = None  # box holding the map's peak: what gets classified
     area_ratio: float | None = None  # share of image pixels in the mask
 
 
@@ -127,6 +128,8 @@ class PatchCore:
             x0, y0 = math.floor(sl[1].start * sx), math.floor(sl[0].start * sy)
             x1, y1 = math.ceil(sl[1].stop * sx), math.ceil(sl[0].stop * sy)
             det.boxes.append((x0, y0, x1 - x0, y1 - y0))
+            if k == top:
+                det.main_box = det.boxes[-1]
 
         det.mask = np.asarray(Image.fromarray(keep).resize((W, H), Image.NEAREST))
         det.area_ratio = float(keep.mean())  # same share at any scale

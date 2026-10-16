@@ -1,8 +1,8 @@
-"""Real /inspect pipeline: PatchCore detection -> contract-shaped InspectResult.
+"""Real /inspect pipeline: PatchCore detection -> defect classifier -> contract-shaped InspectResult.
 
-The classifier (#9) is not in yet, so a defective board gets defect_type "unknown".
-That is a valid answer in the contract, and the agent already handles it
-(it asks for a human review instead of guessing a procedure).
+The classifier names the defect in PatchCore's main box (the one holding the peak).
+When it is unsure, or not loaded, the type is "unknown": a valid answer in the contract,
+and the agent then asks for a human review instead of guessing a procedure.
 """
 
 import base64
@@ -12,6 +12,7 @@ import time
 import numpy as np
 from PIL import Image
 
+from .classifier import DefectClassifier
 from .patchcore import PatchCore
 from .schemas import BoundingBox, InspectResult, ModelVersions
 from .severity import severity_for
@@ -26,10 +27,14 @@ def _png_b64(a: np.ndarray) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def inspect(img: Image.Image, detector: PatchCore) -> InspectResult:
+def inspect(
+    img: Image.Image, detector: PatchCore, classifier: DefectClassifier | None = None
+) -> InspectResult:
     t0 = time.perf_counter()
     det = detector.detect(img)
-    versions = ModelVersions(anomaly_detector=detector.version, classifier="none (#9 pending)")
+    versions = ModelVersions(
+        anomaly_detector=detector.version, classifier=classifier.version if classifier else "not loaded"
+    )
 
     # heatmap for every board (the UI can show why a good board was close to the line)
     common = {
@@ -46,12 +51,14 @@ def inspect(img: Image.Image, detector: PatchCore) -> InspectResult:
             latency_ms=round((time.perf_counter() - t0) * 1000),
         )
 
-    defect_type = "unknown"  # TODO(#9): classifier on the box crops
+    defect_type, confidence = "unknown", None
+    if classifier is not None and det.main_box is not None:
+        defect_type, confidence = classifier.classify(img, det.main_box)
     return InspectResult(
         **common,
         is_defective=True,
         defect_type=defect_type,
-        defect_confidence=None,
+        defect_confidence=round(confidence, 3) if confidence is not None else None,
         severity=severity_for(True, defect_type, det.area_ratio),
         defect_area_ratio=round(det.area_ratio, 5),
         bounding_boxes=[BoundingBox(x=x, y=y, width=w, height=h) for x, y, w, h in det.boxes],
