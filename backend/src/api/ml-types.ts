@@ -79,7 +79,7 @@ export interface components {
         PartType: "pcb1";
         /**
          * @description none = not defective. `missing` is always high (a missing component means a dead board).
-         *     Other defect types by defect_area_ratio: < 0.01 low, 0.01-0.05 medium, > 0.05 high.
+         *     Other defect types by defect_area_ratio: < 0.01 low, 0.01-0.03 medium, > 0.03 high (predicted mask area; set on val, DECISIONS 7).
          * @enum {string}
          */
         Severity: "none" | "low" | "medium" | "high";

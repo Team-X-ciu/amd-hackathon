@@ -18,7 +18,7 @@ These two files are the source of truth for how the three parts talk to each oth
 
 - [x] `defect_type`: `bent`, `melt`, `scratch`, `missing`, `unknown` (VisA pcb1), an `enum` in both contracts
 - [x] `part_type`: `pcb1`
-- [x] Severity: `missing` always high; otherwise by area, < 1% low, 1–5% medium, > 5% high
+- [x] Severity: `missing` always high; otherwise by predicted defect area, < 1% low, 1–3% medium, > 3% high (DECISIONS 7)
 
 See [`docs/DECISIONS.md`](../docs/DECISIONS.md).
 

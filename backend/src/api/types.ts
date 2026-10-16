@@ -264,7 +264,7 @@ export interface components {
         PartType: "pcb1";
         /**
          * @description none = not defective. `missing` is always high. Other types by defect area:
-         *     < 1% low, 1-5% medium, > 5% high.
+         *     < 1% low, 1-3% medium, > 3% high (predicted mask area).
          * @enum {string}
          */
         Severity: "none" | "low" | "medium" | "high";

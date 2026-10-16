@@ -3,7 +3,8 @@
 Described in contracts/ml-service.openapi.yaml (Severity):
 - not defective -> none
 - missing       -> always high (a missing component means a dead board)
-- otherwise by defect area: < 1% low, 1-5% medium, > 5% high
+- otherwise by predicted defect area: < 1% low, 1-3% medium, > 3% high
+  (set on val from PatchCore masks: scripts/severity_cutoffs.py, docs/DECISIONS.md entry 7)
 """
 
 from typing import Literal
@@ -12,7 +13,7 @@ Severity = Literal["none", "low", "medium", "high"]
 
 ALWAYS_HIGH = {"missing"}
 LOW_BELOW = 0.01
-MEDIUM_BELOW = 0.05
+MEDIUM_BELOW = 0.03
 
 
 def severity_for(is_defective: bool, defect_type: str | None, area_ratio: float | None) -> Severity:
