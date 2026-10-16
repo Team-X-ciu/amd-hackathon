@@ -1,0 +1,16 @@
+# Local demo with the REAL vision model running on the host, outside Docker.
+#
+# 1. In ml-service/ start the real service on port 8010 (vision real, explanation still stubbed):
+#      ML_STUB_INSPECT=0 ML_STUB_EXPLAIN=1 uv run --no-project \
+#        --index https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match \
+#        --with fastapi --with "uvicorn[standard]" --with python-multipart --with pydantic --with pillow \
+#        --with torch --with torchvision --with scipy --with numpy \
+#        uvicorn app.main:app --host 0.0.0.0 --port 8010
+#    Needs models/patchcore_pcb1.pt and models/patchcore_pcb1_threshold.json (from #8).
+# 2. docker compose -f docker-compose.yml -f docker-compose.real-ml.yml up -d
+services:
+  backend:
+    environment:
+      ML_SERVICE_URL: http://host.docker.internal:8010
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # needed on Linux

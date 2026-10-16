@@ -20,14 +20,14 @@ from .schemas import Error, ExplainRequest, Explanation, Health, InspectResult, 
 
 log = logging.getLogger("uvicorn.error")
 
-# Loaded once at startup in real mode (ML_STUB=0); None in stub mode or if loading failed.
+# Loaded once at startup when /inspect is real (ML_STUB_INSPECT=0); None in stub mode or if loading failed.
 detector = None
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     global detector
-    if not config.STUB:
+    if not config.STUB_INSPECT:
         try:
             from .patchcore import PatchCore  # torch import only in real mode
 
@@ -76,13 +76,15 @@ async def http_error(_, exc: HTTPException):
 
 @app.get("/health", response_model=Health, response_model_exclude_none=True)
 def health() -> Health:
-    if config.STUB:
-        loaded = ModelsLoaded(anomaly_detector=True, classifier=True, llm_reachable=True)
-    else:
-        # TODO: classifier (#9) and LLM status
-        loaded = ModelsLoaded(anomaly_detector=detector is not None, classifier=False, llm_reachable=False)
+    # Stubbed parts count as loaded. TODO: classifier (#9) and real LLM status
+    loaded = ModelsLoaded(
+        anomaly_detector=config.STUB_INSPECT or detector is not None,
+        classifier=config.STUB_INSPECT,
+        llm_reachable=config.STUB_EXPLAIN,
+    )
     status = "ok" if all(loaded.model_dump().values()) else "degraded"
-    return Health(status=status, models_loaded=loaded, device=_device(), stub=config.STUB)
+    stub = config.STUB_INSPECT or config.STUB_EXPLAIN  # any fake results
+    return Health(status=status, models_loaded=loaded, device=_device(), stub=stub)
 
 
 @app.post(
@@ -103,7 +105,7 @@ async def inspect(
     except UnidentifiedImageError:
         raise HTTPException(400, "Not a valid PNG or JPEG image")
 
-    if config.STUB:
+    if config.STUB_INSPECT:
         return stub.inspect(img, raw)
 
     if detector is None:
@@ -122,8 +124,8 @@ async def inspect(
     responses={400: {"model": Error}, 503: {"model": Error}},
 )
 def explain(req: ExplainRequest) -> Explanation:
-    if config.STUB:
+    if config.STUB_EXPLAIN:
         return stub.explain(req)
 
     # TODO: RAG over manuals/ + LangGraph agent on the vLLM endpoint
-    raise HTTPException(503, "Agent not available yet; run with ML_STUB=1")
+    raise HTTPException(503, "Agent not available yet; run with ML_STUB_EXPLAIN=1")
