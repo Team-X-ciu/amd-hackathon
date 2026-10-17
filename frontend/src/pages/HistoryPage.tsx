@@ -10,7 +10,6 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { StatusBadge, VerdictBadge } from '@/components/status'
 import { formatMs, formatPercent, formatTime, shortId } from '@/lib/format'
 import { useInspectionsQuery, useStatsQuery } from '@/api/queries'
-import { sampleInspections, sampleStats } from '@/mocks/sample-data'
 
 type Filter = 'all' | 'defective' | 'good' | 'open'
 
@@ -41,21 +40,17 @@ export function HistoryPage() {
   const statsQuery = useStatsQuery()
   const inspectionsQuery = useInspectionsQuery({ limit: 50 })
 
-  const stats = statsQuery.data ?? sampleStats
-  const allItems = (inspectionsQuery.data && inspectionsQuery.data.length > 0)
-    ? inspectionsQuery.data
-    : sampleInspections
+  // No sample data: until /stats and /inspections answer, the page shows "—" and empty states.
+  const stats = statsQuery.data
+  const rows = (inspectionsQuery.data ?? []).filter(filters[filter])
 
-  const rows = allItems.filter(filters[filter])
-
-  const rawByType = Object.entries(stats.by_defect_type ?? {})
-  const byType = (rawByType.length > 0 ? rawByType : Object.entries(sampleStats.by_defect_type ?? {}))
+  const byType = Object.entries(stats?.by_defect_type ?? {})
     .map(([type, count]) => ({ type, count: Math.abs(Number(count)) }))
     .sort((a, b) => b.count - a.count)
 
   // Severity of defective boards only; "none" would dwarf the rest.
   const bySeverity = (['low', 'medium', 'high'] as const).map((sev) => {
-    const rawCount = stats.by_severity?.[sev] ?? sampleStats.by_severity?.[sev] ?? 0
+    const rawCount = stats?.by_severity?.[sev] ?? 0
     return {
       severity: sev,
       count: Math.abs(Number(rawCount)),
@@ -72,22 +67,22 @@ export function HistoryPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-        <Kpi label="Boards inspected" value={Math.abs(stats.total).toLocaleString()} />
+        <Kpi label="Boards inspected" value={stats ? Math.abs(stats.total).toLocaleString() : '—'} />
         <Kpi
           label="Defect rate"
-          value={formatPercent(Math.min(1, Math.max(0, stats.defect_rate)))}
-          sub={`${Math.abs(stats.defective)} defective`}
+          value={stats ? formatPercent(Math.min(1, Math.max(0, stats.defect_rate))) : '—'}
+          sub={stats ? `${Math.abs(stats.defective)} defective` : undefined}
         />
         <Kpi
           label="Avg time to decision"
-          value={formatMs(Math.abs(stats.avg_time_to_decision_ms ?? 0))}
+          value={formatMs(stats?.avg_time_to_decision_ms)}
           sub="detection → operator action"
         />
         <Kpi
           label="Agent advice followed"
-          value={formatPercent(Math.min(1, Math.max(0, stats.recommendation_follow_rate ?? 0)), 0)}
+          value={formatPercent(stats?.recommendation_follow_rate, 0)}
         />
-        <Kpi label="Needs human review" value={String(Math.abs(stats.needs_review_count ?? 0))} />
+        <Kpi label="Needs human review" value={stats?.needs_review_count != null ? String(stats.needs_review_count) : '—'} />
       </div>
 
       {/* Charts */}
@@ -99,6 +94,7 @@ export function HistoryPage() {
           </CardHeader>
           <CardContent>
             <div className="h-64">
+              {byType.length === 0 ? <NoData /> : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={byType} layout="vertical" margin={{ left: 8, right: 16 }}>
                   <CartesianGrid horizontal={false} stroke="var(--border)" />
@@ -108,6 +104,7 @@ export function HistoryPage() {
                   <Bar dataKey="count" name="Boards" fill="var(--chart-1)" radius={[0, 4, 4, 0]} barSize={22} />
                 </BarChart>
               </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -119,6 +116,7 @@ export function HistoryPage() {
           </CardHeader>
           <CardContent>
             <div className="h-64">
+              {!stats ? <NoData /> : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={bySeverity} margin={{ left: -16, right: 8 }}>
                   <CartesianGrid vertical={false} stroke="var(--border)" />
@@ -132,6 +130,7 @@ export function HistoryPage() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -194,10 +193,25 @@ export function HistoryPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {rows.length === 0 && (
+              {inspectionsQuery.isPending &&
+                [0, 1, 2].map((n) => (
+                  <TableRow key={n}>
+                    <TableCell colSpan={6} className="px-6">
+                      <div className="h-5 w-full animate-pulse rounded bg-muted" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              {inspectionsQuery.isError && (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-10 text-center text-destructive">
+                    Could not load inspections: {(inspectionsQuery.error as Error).message}
+                  </TableCell>
+                </TableRow>
+              )}
+              {inspectionsQuery.isSuccess && rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
-                    No inspections match this filter.
+                    {inspectionsQuery.data.length === 0 ? 'No inspections yet.' : 'No inspections match this filter.'}
                   </TableCell>
                 </TableRow>
               )}
@@ -207,6 +221,10 @@ export function HistoryPage() {
       </Card>
     </div>
   )
+}
+
+function NoData() {
+  return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No data yet</div>
 }
 
 function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
