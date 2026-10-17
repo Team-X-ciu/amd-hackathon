@@ -35,9 +35,11 @@ services:
       ML_TIMEOUT_MS: ${ML_TIMEOUT_MS:-30000}
       PORT: 3000
       OPENAPI_PATH: /contracts/backend.openapi.yaml   # for the /docs page
+      UPLOAD_DIR: /app/uploads                         # images, masks, heatmaps
     ports: ["${BACKEND_PORT:-3000}:3000"]
     volumes:
       - ./contracts:/contracts:ro
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -48,9 +50,10 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+        VITE_API_URL: ${VITE_API_URL:-/api}   # nginx in the frontend container proxies /api
     ports: ["${FRONTEND_PORT:-5173}:80"]
     depends_on: [backend]
 
 volumes:
   db-data:
+  uploads:
