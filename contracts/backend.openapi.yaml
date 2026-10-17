@@ -41,6 +41,7 @@ paths:
                 image:
                   type: string
                   format: binary
+                  description: PNG or JPEG of one board, at most 10 MB. The type is checked from the file content, not the name.
                 part_type:
                   $ref: "#/components/schemas/PartType"
                 line_id:
@@ -54,9 +55,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/Inspection"
         "400":
-          $ref: "#/components/responses/BadRequest"
+          description: Invalid input -- no image, the file is not a PNG or JPEG, or an unknown part_type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Image larger than 10 MB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "502":
-          description: ML service failed or timed out
+          description: ML service failed or timed out. The inspection is still saved, with status `failed` and `error`.
           content:
             application/json:
               schema:
