@@ -17,7 +17,14 @@ export class MlError extends Error {
 }
 
 async function call<T>(path: string, init: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  let res: globalThis.Response;
+  try {
+    res = await fetch(`${BASE}${path}`, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  } catch (e) {
+    // Unreachable or timed out: still an ML failure (502), not a backend bug (500).
+    const timedOut = e instanceof DOMException && e.name === "TimeoutError";
+    throw new MlError(0, timedOut ? `ML service timed out after ${TIMEOUT_MS} ms` : `ML service unreachable: ${String((e as Error).cause ?? e)}`);
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new MlError(res.status, body.error ?? `ML service returned ${res.status}`);
