@@ -10,6 +10,10 @@ import time
 
 from app import manual
 from app.qc_rules import decide, operator_checks
+import logging
+
+from app import checks, config, llm
+
 
 NAMES = {
     "bent": "Bent component lead",
@@ -61,3 +65,41 @@ def build_explanation(defect_type: str, severity: str,
         "model": "template",
         "latency_ms": int((time.perf_counter() - start) * 1000),
     }
+
+log = logging.getLogger("uvicorn.error")
+
+
+def explain_with_llm(defect_type: str, severity: str,
+                     defect_area_ratio: float | None = None,
+                     question: str | None = None,
+                     history: list[dict] | None = None) -> dict:
+    """Template first (always valid), then let Gemma reword it if its reply passes every check."""
+    start = time.perf_counter()
+    result = build_explanation(defect_type, severity, defect_area_ratio, question)
+    rule = decide(defect_type, severity)
+    facts = {
+        "defect_type": defect_type,
+        "severity": result["priority"],
+        "area_percent": None if defect_area_ratio is None else round(defect_area_ratio * 100, 1),
+        "action": rule.action,
+        "checks": operator_checks(defect_type, severity),
+        "needs_human_review": rule.needs_human_review,
+        "likely_causes": result["likely_causes"],
+        "cited_sections": [{"section": s["section"], "snippet": s["snippet"]} for s in result["sources"]],
+    }
+    try:
+        out = llm.rewrite(facts, question, history)
+        found = checks.problems(out, facts)
+        if found:
+            log.warning("LLM reply rejected, using template: %s", found)
+        else:
+            result.update(
+                summary=out.summary,
+                recommended_action=out.recommended_action,
+                answer=out.answer if question else None,
+                model=config.LLM_MODEL,
+            )
+    except Exception as e:                 # timeout, 401, bad JSON after retry, ...
+        log.warning("LLM failed, using template: %s: %s", type(e).__name__, e)
+    result["latency_ms"] = int((time.perf_counter() - start) * 1000)
+    return result

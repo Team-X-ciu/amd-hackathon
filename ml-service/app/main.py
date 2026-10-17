@@ -17,7 +17,7 @@ from PIL import Image, UnidentifiedImageError
 
 from . import config, stub
 from .schemas import Error, ExplainRequest, Explanation, Health, InspectResult, ModelsLoaded
-from .explain import build_explanation
+from .explain import explain_with_llm
 
 log = logging.getLogger("uvicorn.error")
 
@@ -145,12 +145,13 @@ def explain(req: ExplainRequest) -> Explanation:
         return getattr(x, "value", x)   # generated schemas may use Enum types: Enum -> "bent"
 
     try:
-        result = build_explanation(
+        result = explain_with_llm(
         plain(req.defect_type),
         plain(req.severity),
         defect_area_ratio=req.defect_area_ratio,
         question=req.question,
-        )
+        history=[{"role": plain(t.role), "content": t.content} for t in (req.history or [])],
+    )
     except ValueError as e:              # a type/severity the manual doesn't cover
         raise HTTPException(400, str(e))
     return Explanation(**result)
