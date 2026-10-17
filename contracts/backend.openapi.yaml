@@ -41,6 +41,7 @@ paths:
                 image:
                   type: string
                   format: binary
+                  description: PNG or JPEG of one board, at most 10 MB. The type is checked from the file content, not the name.
                 part_type:
                   $ref: "#/components/schemas/PartType"
                 line_id:
@@ -54,9 +55,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/Inspection"
         "400":
-          $ref: "#/components/responses/BadRequest"
+          description: Invalid input -- no image, the file is not a PNG or JPEG, or an unknown part_type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Image larger than 10 MB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "502":
-          description: ML service failed or timed out
+          description: ML service failed or timed out. The inspection is still saved, with status `failed` and `error`.
           content:
             application/json:
               schema:
@@ -134,6 +145,21 @@ paths:
       responses:
         "200":
           description: Mask PNG
+          content:
+            image/png: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /inspections/{id}/heatmap:
+    get:
+      summary: PatchCore anomaly heatmap for the overlay (grayscale PNG)
+      operationId: getInspectionHeatmap
+      description: 404 when the inspection does not exist or has no heatmap (good board, or ML failed).
+      parameters:
+        - $ref: "#/components/parameters/InspectionId"
+      responses:
+        "200":
+          description: Heatmap PNG
           content:
             image/png: {}
         "404":

@@ -78,6 +78,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/inspections/{id}/heatmap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PatchCore anomaly heatmap for the overlay (grayscale PNG)
+         * @description 404 when the inspection does not exist or has no heatmap (good board, or ML failed).
+         */
+        get: operations["getInspectionHeatmap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/inspections/{id}/explain": {
         parameters: {
             query?: never;
@@ -462,7 +482,10 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /** Format: binary */
+                    /**
+                     * Format: binary
+                     * @description PNG or JPEG of one board, at most 10 MB. The type is checked from the file content, not the name.
+                     */
                     image: string;
                     part_type?: components["schemas"]["PartType"];
                     /** @example line-1 */
@@ -480,8 +503,25 @@ export interface operations {
                     "application/json": components["schemas"]["Inspection"];
                 };
             };
-            400: components["responses"]["BadRequest"];
-            /** @description ML service failed or timed out */
+            /** @description Invalid input -- no image, the file is not a PNG or JPEG, or an unknown part_type */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Image larger than 10 MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description ML service failed or timed out. The inspection is still saved, with status `failed` and `error`. */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -551,6 +591,29 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Mask PNG */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getInspectionHeatmap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InspectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Heatmap PNG */
             200: {
                 headers: {
                     [name: string]: unknown;
