@@ -57,8 +57,8 @@ def build_explanation(defect_type: str, severity: str,
         "recommended_action": templated_action(defect_type, severity),
         "priority": severity,
         "answer": None if question is None else (
-            "Answering questions needs the AI model, which is not available right now. "
-            "Please ask a technician."
+            f"I can't give a checked answer to that. The decision comes from the QC manual: "
+            f"{rule.action} ({rule.section}). Please ask a technician if you disagree."
         ),
         "sources": manual.sources_for(defect_type, severity),
         "needs_human_review": rule.needs_human_review,
@@ -82,7 +82,7 @@ def explain_with_llm(defect_type: str, severity: str,
         "severity": result["priority"],
         "area_percent": None if defect_area_ratio is None else round(defect_area_ratio * 100, 1),
         "action": rule.action,
-        "checks": operator_checks(defect_type, severity),
+        "checks": operator_checks(defect_type, severity) or [f"no further checks ({rule.section})"],
         "needs_human_review": rule.needs_human_review,
         "likely_causes": result["likely_causes"],
         "cited_sections": [{"section": s["section"], "snippet": s["snippet"]} for s in result["sources"]],
@@ -91,7 +91,8 @@ def explain_with_llm(defect_type: str, severity: str,
         out = llm.rewrite(facts, question, history)
         found = checks.problems(out, facts)
         if found:
-            log.warning("LLM reply rejected, using template: %s", found)
+            log.warning("LLM reply rejected, using template: %s | Gemma's action was: %r",
+                        found, out.recommended_action[:150])
         else:
             result.update(
                 summary=out.summary,
@@ -100,6 +101,6 @@ def explain_with_llm(defect_type: str, severity: str,
                 model=config.LLM_MODEL,
             )
     except Exception as e:                 # timeout, 401, bad JSON after retry, ...
-        log.warning("LLM failed, using template: %s: %s", type(e).__name__, e)
+         log.warning("LLM failed, using template: %s: %s", type(e).__name__, e)
     result["latency_ms"] = int((time.perf_counter() - start) * 1000)
     return result
