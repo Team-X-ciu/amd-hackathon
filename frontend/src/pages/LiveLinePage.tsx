@@ -12,11 +12,10 @@ import { levelOf, levelStyles, verdictLabel } from '@/lib/status'
 import { formatMs, formatPercent, shortId, timeAgo } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useInspectionsQuery, useStatsQuery } from '@/api/queries'
-import { sampleInspections, sampleStats } from '@/mocks/sample-data'
 
 export function LiveLinePage() {
   const [isPaused, setIsPaused] = useState(false)
-  const [stream, setStream] = useState<Inspection[]>(sampleInspections)
+  const [stream, setStream] = useState<Inspection[]>([])
 
   const inspectionsQuery = useInspectionsQuery(
     { limit: 10 },
@@ -36,15 +35,15 @@ export function LiveLinePage() {
 
       if (freshItems.length === 0) return prev
 
-      // Prepend the newest arriving board, retain history below (keep up to 15 boards)
-      return [freshItems[0], ...prev].slice(0, 15)
+      // Prepend the arriving boards (API order: newest first), keep up to 15
+      return [...freshItems, ...prev].slice(0, 15)
     })
   }, [inspectionsQuery.data, isPaused])
 
-  const stats = statsQuery.data ?? sampleStats
+  // No sample data: "—" and an empty state until /stats and /inspections answer.
+  const stats = statsQuery.data
   const [latest, ...recent] = stream
   const awaiting = stream.filter((i) => i.status === 'explained' || i.status === 'explain_failed').length
-  const level = levelOf(latest.vision)
 
   return (
     <div className="space-y-6">
@@ -87,15 +86,33 @@ export function LiveLinePage() {
 
       {/* Shift counters */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Inspected this shift" value={Math.abs(stats.total).toLocaleString()} />
-        <Kpi label="Defect rate" value={formatPercent(Math.min(1, Math.max(0, stats.defect_rate)))} />
+        <Kpi label="Inspected this shift" value={stats ? Math.abs(stats.total).toLocaleString() : '—'} />
+        <Kpi label="Defect rate" value={stats ? formatPercent(Math.min(1, Math.max(0, stats.defect_rate))) : '—'} />
         <Kpi label="Awaiting decision" value={String(awaiting)} />
-        <Kpi label="Avg inspection time" value={formatMs(Math.abs(stats.avg_inspection_latency_ms ?? 0))} />
+        <Kpi label="Avg inspection time" value={formatMs(stats?.avg_inspection_latency_ms)} />
       </div>
 
+      {!latest ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-16 text-center text-muted-foreground">
+            {inspectionsQuery.isPending ? (
+              <p>Loading boards…</p>
+            ) : inspectionsQuery.isError ? (
+              <p className="text-destructive">Could not load boards: {(inspectionsQuery.error as Error).message}</p>
+            ) : (
+              <>
+                <p>No boards yet. Upload one or start the simulator.</p>
+                <Button variant="outline" nativeButton={false} render={<Link to="/upload" />}>
+                  Upload a board <ArrowRight />
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Newest board */}
-        <Card className={cn('border-l-4 lg:col-span-2 transition-all duration-300', levelStyles[level].border)}>
+        <Card className={cn('border-l-4 lg:col-span-2 transition-all duration-300', levelStyles[levelOf(latest.vision)].border)}>
           <CardHeader>
             <CardTitle className="text-lg">Latest board on conveyor</CardTitle>
             <CardDescription className="font-mono">
@@ -106,7 +123,7 @@ export function LiveLinePage() {
             </CardAction>
           </CardHeader>
           <CardContent className="grid gap-6 md:grid-cols-2">
-            <InspectionImage imageUrl={latest.image_url} maskUrl={latest.vision?.mask_url} />
+            <InspectionImage key={latest.id} imageUrl={latest.image_url} maskUrl={latest.vision?.mask_url} />
             <div className="flex flex-col gap-5">
               <VerdictBadge vision={latest.vision} size="lg" className="self-start" />
               {latest.vision && (
@@ -170,6 +187,7 @@ export function LiveLinePage() {
           </CardContent>
         </Card>
       </div>
+      )}
     </div>
   )
 }

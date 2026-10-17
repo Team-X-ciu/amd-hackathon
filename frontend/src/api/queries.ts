@@ -8,6 +8,24 @@ export type DecisionInput = components['schemas']['DecisionInput']
 export type ChatMessage = components['schemas']['ChatMessage']
 export type Health = paths['/health']['get']['responses']['200']['content']['application/json']
 
+/** A non-2xx answer from the backend, with its HTTP status and the contract's `Error.error` text. */
+export class ApiError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+function apiError(response: Response, body: unknown): ApiError {
+  const text = (body as { error?: unknown } | undefined)?.error
+  return new ApiError(response.status, typeof text === 'string' ? text : `HTTP ${response.status}`)
+}
+
+/** Retry network blips and 5xx, but not answers that won't change (404, 400, 501). */
+const retryUnlessFinal = (count: number, err: unknown) =>
+  !(err instanceof ApiError && (err.status < 500 || err.status === 501)) && count < 2
+
 /** System health indicator (/health) */
 export function useHealthQuery() {
   return useQuery({
@@ -36,12 +54,13 @@ export function useInspectionsQuery(
   return useQuery({
     queryKey: ['inspections', params],
     queryFn: async () => {
-      const { data, error } = await api.GET('/inspections', {
+      const { data, error, response } = await api.GET('/inspections', {
         params: { query: params },
       })
-      if (error) throw error
+      if (error || !response.ok) throw apiError(response, error)
       return data?.items ?? []
     },
+    retry: retryUnlessFinal,
     enabled: options?.enabled ?? true,
     refetchInterval: options?.refetchInterval ?? 5_000,
   })
@@ -53,12 +72,13 @@ export function useInspectionQuery(id: string | undefined) {
     queryKey: ['inspection', id],
     queryFn: async () => {
       if (!id) throw new Error('Missing inspection ID')
-      const { data, error } = await api.GET('/inspections/{id}', {
+      const { data, error, response } = await api.GET('/inspections/{id}', {
         params: { path: { id } },
       })
-      if (error) throw error
+      if (error || !response.ok) throw apiError(response, error)
       return data
     },
+    retry: retryUnlessFinal,
     enabled: Boolean(id),
     // If the board is still being explained by the agent, poll every 2s until resolved
     refetchInterval: (query) => {
@@ -73,10 +93,11 @@ export function useStatsQuery() {
   return useQuery({
     queryKey: ['stats'],
     queryFn: async () => {
-      const { data, error } = await api.GET('/stats')
-      if (error) throw error
+      const { data, error, response } = await api.GET('/stats')
+      if (error || !response.ok) throw apiError(response, error)
       return data as Stats
     },
+    retry: retryUnlessFinal,
     refetchInterval: 10_000,
   })
 }

@@ -29,33 +29,44 @@ import { levelStyles, type Level } from '@/lib/status'
 import { formatMs, formatPercent, formatTime, shortId } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
+  ApiError,
   useInspectionQuery,
   useDecisionMutation,
   useChatMutation,
   useRetryExplainMutation,
 } from '@/api/queries'
-import { sampleInspections } from '@/mocks/sample-data'
 
 export function InspectionDetailPage() {
   const { id } = useParams()
   const [overlayMode, setOverlayMode] = useState<OverlayMode>('mask')
 
   const query = useInspectionQuery(id)
-  const fallback = sampleInspections.find((i) => i.id === id) ?? sampleInspections[0]
-  const inspection = query.data ?? fallback
 
-  if (!inspection) {
+  if (query.isPending) return <DetailSkeleton />
+
+  if (query.isError) {
+    const notFound = query.error instanceof ApiError && query.error.status === 404
     return (
       <div className="flex flex-col items-center gap-4 py-24 text-center">
-        <h1 className="text-2xl font-semibold">Inspection not found</h1>
-        <p className="text-muted-foreground">The board record does not exist or may have expired.</p>
-        <Button variant="outline" nativeButton={false} render={<Link to="/live" />}>
-          <ArrowLeft /> Back to live line
-        </Button>
+        <h1 className="text-2xl font-semibold">{notFound ? 'Inspection not found' : 'Could not load this inspection'}</h1>
+        <p className="text-muted-foreground">
+          {notFound ? 'The board record does not exist or may have expired.' : String((query.error as Error)?.message ?? query.error)}
+        </p>
+        <div className="flex gap-3">
+          {!notFound && (
+            <Button variant="outline" onClick={() => query.refetch()}>
+              <RotateCcw /> Retry
+            </Button>
+          )}
+          <Button variant="outline" nativeButton={false} render={<Link to="/live" />}>
+            <ArrowLeft /> Back to live line
+          </Button>
+        </div>
       </div>
     )
   }
 
+  const inspection = query.data
   const v = inspection.vision
 
   // Determine state category: 'failed' | 'ok' | 'unknown' | 'defect'
@@ -85,7 +96,8 @@ export function InspectionDetailPage() {
               </span>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Inspected at {formatTime(inspection.created_at)} · {inspection.line_id ?? 'Line 1'} ·{' '}
+              Inspected at {formatTime(inspection.created_at)}
+              {inspection.line_id && ` · ${inspection.line_id}`} ·{' '}
               {inspection.source === 'upload' ? 'Manual Upload' : 'Automated Line Camera'}
             </p>
           </div>
@@ -129,9 +141,10 @@ export function InspectionDetailPage() {
               <button
                 type="button"
                 id="view-mode-mask"
+                disabled={!v?.mask_url}
                 onClick={() => setOverlayMode('mask')}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all cursor-pointer',
+                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40',
                   overlayMode === 'mask' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -140,9 +153,10 @@ export function InspectionDetailPage() {
               <button
                 type="button"
                 id="view-mode-heatmap"
+                disabled={!v?.heatmap_url}
                 onClick={() => setOverlayMode('heatmap')}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all cursor-pointer',
+                  'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40',
                   overlayMode === 'heatmap' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -153,6 +167,7 @@ export function InspectionDetailPage() {
 
           <CardContent className="space-y-6">
             <InspectionImage
+              key={inspection.id}
               imageUrl={inspection.image_url}
               maskUrl={v?.mask_url}
               heatmapUrl={v?.heatmap_url}
@@ -201,6 +216,28 @@ export function InspectionDetailPage() {
           <AgentPanel inspection={inspection} />
           <DecisionPanel inspection={inspection} />
           <ChatPanel inspection={inspection} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Same layout as the page while the inspection loads, so nothing jumps and no fake data shows. */
+function DetailSkeleton() {
+  const bar = 'animate-pulse rounded bg-muted'
+  return (
+    <div className="space-y-6" aria-busy="true" aria-label="Loading inspection">
+      <div className="space-y-3">
+        <div className={cn(bar, 'h-4 w-32')} />
+        <div className={cn(bar, 'h-8 w-72')} />
+        <div className={cn(bar, 'h-4 w-56')} />
+      </div>
+      <div className={cn(bar, 'h-16 w-full rounded-xl')} />
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className={cn(bar, 'aspect-square rounded-xl lg:col-span-3')} />
+        <div className="flex flex-col gap-6 lg:col-span-2">
+          <div className={cn(bar, 'h-48 rounded-xl')} />
+          <div className={cn(bar, 'h-40 rounded-xl')} />
         </div>
       </div>
     </div>
