@@ -38,10 +38,6 @@ api.use(inspectionsRouter);
 // TODO(backend): remaining routes from the contract
 const todo = (_req: Request, res: Response) => res.status(501).json({ error: "Not implemented yet" });
 api.get("/inspections", todo);
-api.get("/inspections/:id", todo);
-api.get("/inspections/:id/image", todo);
-api.get("/inspections/:id/mask", todo);
-api.get("/inspections/:id/heatmap", todo);
 api.post("/inspections/:id/explain", todo);
 api.post("/inspections/:id/chat", todo);
 api.post("/inspections/:id/decision", todo);

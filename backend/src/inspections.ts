@@ -8,11 +8,13 @@ import type { JSONValue } from "postgres";
 import type { components } from "./api/types.js";
 import { sql } from "./db.js";
 import { MlError, mlInspect } from "./ml-client.js";
-import { removeFiles, saveFile, sniffImage } from "./storage.js";
+import { filePath, removeFiles, saveFile, sniffImage } from "./storage.js";
 
 type Inspection = components["schemas"]["Inspection"];
 type VisionResult = components["schemas"]["VisionResult"];
 type PartType = components["schemas"]["PartType"];
+type DecisionInput = components["schemas"]["DecisionInput"];
+type ChatMessage = components["schemas"]["ChatMessage"];
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // contract: 413 above this
 const PART_TYPES: PartType[] = ["pcb1"];
@@ -33,8 +35,29 @@ interface InspectionRow {
   created_at: Date;
 }
 
-/** Row -> contract shape. File URLs are derived from the id, so only paths are stored. */
-export function toInspection(row: InspectionRow): Inspection {
+/** One row of the `decisions` table. */
+interface DecisionRow {
+  decision: DecisionInput["decision"];
+  followed_recommendation: boolean | null;
+  note: string | null;
+  operator: string | null;
+  decided_at: Date;
+  time_to_decision_ms: number;
+}
+
+/** One row of the `chat_messages` table (only the columns the contract shows). */
+interface ChatRow {
+  role: ChatMessage["role"];
+  content: string;
+  sources: ChatMessage["sources"];
+  created_at: Date;
+}
+
+/**
+ * Row -> contract shape. File URLs are derived from the id, so only paths are stored.
+ * `decision` and `chat` come from their own tables; callers that don't read them get null / [].
+ */
+export function toInspection(row: InspectionRow, decision: DecisionRow | null = null, chat: ChatRow[] = []): Inspection {
   const base = `/api/inspections/${row.id}`;
   return {
     id: row.id,
@@ -50,11 +73,21 @@ export function toInspection(row: InspectionRow): Inspection {
       heatmap_url: row.heatmap_path ? `${base}/heatmap` : null,
     },
     explanation: row.explanation,
-    decision: null, // TODO(#23): join decisions
-    chat: [], // TODO(#23): join chat_messages
+    decision: decision && {
+      decision: decision.decision,
+      followed_recommendation: decision.followed_recommendation ?? undefined,
+      note: decision.note ?? undefined,
+      operator: decision.operator ?? undefined,
+      decided_at: decision.decided_at.toISOString(),
+      time_to_decision_ms: decision.time_to_decision_ms,
+    },
+    chat: chat.map((m) => ({ role: m.role, content: m.content, sources: m.sources, created_at: m.created_at.toISOString() })),
     error: row.error,
   };
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const notFound = (res: Response, what = "inspection") => res.status(404).json({ error: `${what} not found` });
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_IMAGE_BYTES } });
 
@@ -120,3 +153,33 @@ inspectionsRouter.post("/inspections", upload.single("image"), async (req: Reque
     res.status(500).json({ error: "Could not save the inspection", detail: String(e) });
   }
 });
+
+inspectionsRouter.get("/inspections/:id", async (req: Request<{ id: string }>, res: Response) => {
+  const { id } = req.params;
+  if (!UUID.test(id)) return notFound(res); // a malformed id would make Postgres throw on the uuid cast
+  const [row] = await sql<InspectionRow[]>`select * from inspections where id = ${id}`;
+  if (!row) return notFound(res);
+  const [decision] = await sql<DecisionRow[]>`select * from decisions where inspection_id = ${id}`;
+  const chat = await sql<ChatRow[]>`
+    select role, content, sources, created_at from chat_messages
+    where inspection_id = ${id} order by created_at, id`;
+  res.json(toInspection(row, decision ?? null, chat));
+});
+
+// Files are written once and never change, so the browser may cache them for good.
+const FILE_ROUTES = { image: "image_path", mask: "mask_path", heatmap: "heatmap_path" } as const;
+
+for (const [kind, column] of Object.entries(FILE_ROUTES)) {
+  inspectionsRouter.get(`/inspections/:id/${kind}`, async (req: Request<{ id: string }>, res: Response) => {
+    const { id } = req.params;
+    if (!UUID.test(id)) return notFound(res);
+    const [row] = await sql<{ path: string | null }[]>`select ${sql(column)} as path from inspections where id = ${id}`;
+    if (!row) return notFound(res);
+    // No mask/heatmap for a good board; neither for a failed one.
+    if (!row.path) return notFound(res, kind);
+    // Content-Type comes from the extension we chose (.jpg / .png).
+    res.sendFile(filePath(row.path), { maxAge: "1y", immutable: true }, (err) => {
+      if (err && !res.headersSent) notFound(res, `${kind} file`);
+    });
+  });
+}
