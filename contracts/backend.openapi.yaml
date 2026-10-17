@@ -150,6 +150,21 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /inspections/{id}/heatmap:
+    get:
+      summary: PatchCore anomaly heatmap for the overlay (grayscale PNG)
+      operationId: getInspectionHeatmap
+      description: 404 when the inspection does not exist or has no heatmap (good board, or ML failed).
+      parameters:
+        - $ref: "#/components/parameters/InspectionId"
+      responses:
+        "200":
+          description: Heatmap PNG
+          content:
+            image/png: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /inspections/{id}/explain:
     post:
       summary: Retry the explanation (it normally starts automatically)

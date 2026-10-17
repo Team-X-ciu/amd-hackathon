@@ -78,6 +78,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/inspections/{id}/heatmap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * PatchCore anomaly heatmap for the overlay (grayscale PNG)
+         * @description 404 when the inspection does not exist or has no heatmap (good board, or ML failed).
+         */
+        get: operations["getInspectionHeatmap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/inspections/{id}/explain": {
         parameters: {
             query?: never;
@@ -571,6 +591,29 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Mask PNG */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": unknown;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getInspectionHeatmap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["InspectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Heatmap PNG */
             200: {
                 headers: {
                     [name: string]: unknown;
