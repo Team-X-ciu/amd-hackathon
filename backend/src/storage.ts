@@ -22,6 +22,11 @@ export async function saveFile(name: string, data: Buffer): Promise<string> {
   return name;
 }
 
+/** Absolute path of a stored file, for res.sendFile. `name` is always one we generated. */
+export function filePath(name: string): string {
+  return join(UPLOAD_DIR, name);
+}
+
 export async function removeFiles(names: string[]): Promise<void> {
   await Promise.all(names.map((n) => rm(join(UPLOAD_DIR, n), { force: true })));
 }
