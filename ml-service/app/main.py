@@ -17,6 +17,7 @@ from PIL import Image, UnidentifiedImageError
 
 from . import config, stub
 from .schemas import Error, ExplainRequest, Explanation, Health, InspectResult, ModelsLoaded
+from .explain import build_explanation
 
 log = logging.getLogger("uvicorn.error")
 
@@ -139,5 +140,17 @@ def explain(req: ExplainRequest) -> Explanation:
     if config.STUB_EXPLAIN:
         return stub.explain(req)
 
-    # TODO: RAG over manuals/ + LangGraph agent on the vLLM endpoint
-    raise HTTPException(503, "Agent not available yet; run with ML_STUB_EXPLAIN=1")
+    # Decision table + manual decide and cite; no LLM yet (templated). LLM wording comes later in llm.py.
+    def plain(x):
+        return getattr(x, "value", x)   # generated schemas may use Enum types: Enum -> "bent"
+
+    try:
+        result = build_explanation(
+        plain(req.defect_type),
+        plain(req.severity),
+        defect_area_ratio=req.defect_area_ratio,
+        question=req.question,
+        )
+    except ValueError as e:              # a type/severity the manual doesn't cover
+        raise HTTPException(400, str(e))
+    return Explanation(**result)
