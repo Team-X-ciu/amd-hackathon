@@ -135,14 +135,15 @@ export function useChatMutation(inspectionId: string | undefined) {
   return useMutation({
     mutationFn: async (message: string) => {
       if (!inspectionId) throw new Error('Missing inspection ID')
-      const { data, error } = await api.POST('/inspections/{id}/chat', {
+      const { data, error, response } = await api.POST('/inspections/{id}/chat', {
         params: { path: { id: inspectionId } },
         body: { message },
       })
-      if (error) throw error
+      if (error || !response.ok) throw apiError(response, error)
       return data
     },
-    onSuccess: () => {
+    // Reload the inspection's chat either way: on a 502 the question is still saved
+    onSettled: () => {
       if (inspectionId) {
         queryClient.invalidateQueries({ queryKey: ['inspection', inspectionId] })
       }

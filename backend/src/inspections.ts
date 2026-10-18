@@ -8,7 +8,7 @@ import type { JSONValue } from "postgres";
 import type { components } from "./api/types.js";
 import { sql } from "./db.js";
 import { startExplanation } from "./explain.js";
-import { MlError, mlInspect } from "./ml-client.js";
+import { MlError, mlExplain, mlInspect, type ExplainRequest } from "./ml-client.js";
 import { filePath, removeFiles, saveFile, sniffImage } from "./storage.js";
 
 type Inspection = components["schemas"]["Inspection"];
@@ -230,6 +230,49 @@ inspectionsRouter.post("/inspections/:id/decision", async (req: Request<{ id: st
     select role, content, sources, created_at from chat_messages
     where inspection_id = ${id} order by created_at, id`;
   res.json(toInspection(saved.row, saved.decision, chat));
+});
+
+// Operator follow-up question (#23). The operator message is stored first, so it survives an ML
+// failure; the agent answers through ML /explain with the question and the earlier turns.
+inspectionsRouter.post("/inspections/:id/chat", async (req: Request<{ id: string }>, res: Response) => {
+  const { id } = req.params;
+  if (!UUID.test(id)) return notFound(res);
+  const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+  if (!message) return res.status(400).json({ error: "message must be a non-empty string" });
+  const [row] = await sql<InspectionRow[]>`select * from inspections where id = ${id}`;
+  if (!row) return notFound(res);
+  if (!row.explanation || !row.vision) {
+    return res.status(409).json({ error: "No explanation yet: ask once the agent has explained this board" });
+  }
+
+  const history = await sql<{ role: ChatRow["role"]; content: string }[]>`
+    select role, content from chat_messages where inspection_id = ${id} order by created_at, id`;
+  await sql`insert into chat_messages (inspection_id, role, content) values (${id}, 'operator', ${message})`;
+
+  const v = row.vision;
+  const request: ExplainRequest = {
+    defect_type: v.defect_type ?? "unknown",
+    severity: v.severity,
+    anomaly_score: v.anomaly_score,
+    ...(v.defect_area_ratio != null && { defect_area_ratio: v.defect_area_ratio }),
+    ...(row.part_type === "pcb1" && { part_type: row.part_type }),
+    question: message,
+    history, // backend and ML contracts use the same roles: operator | assistant
+  };
+  let reply;
+  try {
+    reply = await mlExplain(request);
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    return res.status(502).json({ error: "The agent did not answer; your question is saved, try again", detail });
+  }
+  // `answer` is the reply to the question; fall back to the recommendation if the agent gave none
+  const content = reply.answer?.trim() || `${reply.summary} ${reply.recommended_action}`.trim();
+  const [saved] = await sql<ChatRow[]>`
+    insert into chat_messages (inspection_id, role, content, sources)
+    values (${id}, 'assistant', ${content}, ${sql.json((reply.sources ?? []) as unknown as JSONValue)})
+    returning role, content, sources, created_at`;
+  res.json({ role: saved.role, content: saved.content, sources: saved.sources, created_at: saved.created_at.toISOString() });
 });
 
 const STATUSES: Inspection["status"][] = ["inspected", "explaining", "explained", "explain_failed", "decided", "failed"];
