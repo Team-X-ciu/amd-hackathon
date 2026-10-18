@@ -22,7 +22,7 @@ import {
 import { Link, useParams } from 'react-router-dom'
 import type { Inspection } from '@/api/client'
 import { Button } from '@/components/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { InspectionImage, type OverlayMode } from '@/components/InspectionImage'
 import { StatusBadge, VerdictBadge } from '@/components/status'
 import { levelStyles, type Level } from '@/lib/status'
@@ -387,13 +387,7 @@ function AgentPanel({ inspection }: { inspection: Inspection }) {
           <Bot className="size-5 text-primary" /> Agent Explanation (QC Manual)
         </CardTitle>
         {e?.model && <CardDescription className="font-mono text-xs">{e.model}</CardDescription>}
-        {e && (
-          <CardAction>
-            <span className="rounded-md border border-border px-2 py-0.5 text-xs font-medium uppercase text-muted-foreground">
-              Priority: {e.priority.replace('_', ' ')}
-            </span>
-          </CardAction>
-        )}
+
       </CardHeader>
       <CardContent className="gap-4">
         {inspection.status === 'explaining' && (
@@ -407,9 +401,16 @@ function AgentPanel({ inspection }: { inspection: Inspection }) {
 
         {inspection.status === 'explain_failed' && (
           <>
-            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              <span className="font-medium">Could not generate explanation:</span> {inspection.error ?? 'Agent timed out'}
+            <div id="explain-failed" className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <p className="font-semibold">Explanation failed</p>
+              <p>{inspection.error ?? 'The agent did not answer.'}</p>
+              <p className="text-zinc-300">The vision result above still stands; you can decide without the explanation.</p>
             </div>
+            {retryMutation.isError && (
+              <p role="alert" className="text-sm text-destructive">
+                Retry not started: {(retryMutation.error as Error).message}
+              </p>
+            )}
             <Button
               id="retry-explain"
               variant="outline"
@@ -424,6 +425,32 @@ function AgentPanel({ inspection }: { inspection: Inspection }) {
 
         {!e && inspection.vision && !inspection.vision.is_defective && (
           <p className="text-muted-foreground text-sm">No anomaly detected. Quality criteria satisfied.</p>
+        )}
+
+        {!e && inspection.status === 'decided' && inspection.vision?.is_defective && (
+          <p className="text-muted-foreground text-sm">
+            Decided before the explanation arrived; it is added here when the agent finishes.
+          </p>
+        )}
+
+        {!e && !inspection.vision && (
+          <p className="text-muted-foreground text-sm">No explanation: the vision step failed for this board.</p>
+        )}
+
+        {e && (
+          <div className="flex flex-wrap gap-2">
+            {e.needs_human_review && (
+              <span
+                id="needs-human-review"
+                className="inline-flex items-center gap-1 rounded-md border border-review/40 bg-review/15 px-2 py-0.5 text-xs font-medium uppercase text-review"
+              >
+                <AlertTriangle className="size-3.5" /> Needs human review
+              </span>
+            )}
+            <span className="rounded-md border border-border px-2 py-0.5 text-xs font-medium uppercase text-muted-foreground">
+              Priority: {e.priority.replace('_', ' ')}
+            </span>
+          </div>
         )}
 
         {e && (
@@ -471,9 +498,9 @@ function AgentPanel({ inspection }: { inspection: Inspection }) {
               </div>
             )}
 
-            {e.needs_human_review && (
-              <p className="flex items-center gap-2 text-xs text-review font-medium">
-                <AlertTriangle className="size-4" /> AI recommends second technician inspection.
+            {e.sources.length === 0 && (
+              <p className="flex items-center gap-2 text-xs font-medium text-review">
+                <AlertTriangle className="size-4" /> No QC manual section found for this defect: verify by hand.
               </p>
             )}
           </>
