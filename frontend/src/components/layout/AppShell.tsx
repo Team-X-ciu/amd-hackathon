@@ -1,5 +1,5 @@
 // App frame: top bar with brand, navigation and system health; the page renders below.
-import { Activity, History, ScanLine, Upload } from 'lucide-react'
+import { Activity, History, Upload } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { StatusDot } from '@/components/status'
@@ -46,9 +46,7 @@ export function AppShell() {
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6">
           <NavLink to="/live" className="flex shrink-0 items-center gap-2.5" id="brand-link">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <ScanLine className="size-5" />
-            </span>
+            <img src="/team-x-logo.svg" alt="Team X" className="size-9" />
             <span className="leading-tight">
               <span className="block text-base font-semibold tracking-tight">Defect Copilot</span>
               <span className="block text-xs text-muted-foreground">Line 1 · PCB inspection</span>
