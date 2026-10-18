@@ -93,7 +93,7 @@ def health() -> Health:
     loaded = ModelsLoaded(
         anomaly_detector=config.STUB_INSPECT or detector is not None,
         classifier=config.STUB_INSPECT or classifier is not None,
-        llm_reachable=config.STUB_EXPLAIN,
+        llm_reachable=config.STUB_EXPLAIN or config.LLM_API_KEY != "not-needed-for-vllm",  # key configured; not pinged (rate limits)
     )
     status = "ok" if all(loaded.model_dump().values()) else "degraded"
     stub = config.STUB_INSPECT or config.STUB_EXPLAIN  # any fake results
