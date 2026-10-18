@@ -129,3 +129,24 @@ PatchCore catches into thirds (0.97% / 3.21%), rounded to **under 1% `low`, 1–
   so size alone already ranks the types sensibly; `missing` stays always `high` once #9 names it.
 - False alarms are small: none of the 9 on val (or 4 on test) lands in `high`.
 - Test, counted once (unrounded cut-offs): 9 low / 20 medium / 16 high on caught defective boards.
+
+## 8. The agent: rules decide, Gemma explains, code checks (17 Oct 2026, issues #11, #20)
+
+- **The action is never the LLM's.** `qc_rules.py` turns the QC manual into a decision table:
+  `decide(defect_type, severity)` → `accept` / `rework` / `reject` / `review`, whether a human must
+  review, the extra checks the camera cannot see, and the manual section the rule comes from.
+- **No vector RAG.** The manual is 1,155 words. `manual.py` splits it by section ID and the defect
+  type selects the section to cite; the full manual also goes into the prompt. A wrong retrieval
+  would mean a wrong citation, and a lookup cannot retrieve the wrong section.
+- **Gemma only rewords.** `llm.py` sends the facts (action, checks, causes, cited sections) to
+  Gemma-4-31B-IT on AMD Token Factory and asks for a summary, an action text that starts with the
+  decided action, and an answer if the operator asked a question.
+- **Code checks every reply** (`checks.py`): the action prefix matches the table, every number
+  appears in the facts, and there is no order to stop the line. Any failure, timeout or provider
+  error returns the templated explanation (`build_explanation`), which has the same action.
+- **Judgement calls in the table:** melt · medium → reject (the surface can't be verified from the
+  image); scratch · low → accept, with the high-severity checks always listed.
+- **Known gaps:** severity is area-based while the manual's "high" is functional; the stop-line check
+  is a text match ("stop the line … QC-6.1" would pass).
+- **Evidence:** 50 offline tests; live golden set 7/7 actions correct, including a prompt injection.
+- `LLM_TIMEOUT_S=40` with one retry stays under the backend's `ML_EXPLAIN_TIMEOUT_MS=90000`.
