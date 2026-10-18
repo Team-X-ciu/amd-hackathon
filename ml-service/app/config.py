@@ -24,3 +24,7 @@ DEFECT_TYPES = ["bent", "melt", "scratch", "missing"]  # plus "unknown" when the
 CLASSIFIER_MIN_CONFIDENCE = float(os.getenv("CLASSIFIER_MIN_CONFIDENCE", "0.6"))
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
+# Chat agent tools (app/tools.py): off by default; only used for operator questions.
+AGENT_TOOLS = os.getenv("AGENT_TOOLS", "0") == "1"
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:3000")

@@ -40,6 +40,13 @@ class LLMOutput(BaseModel):
     answer: str | None = None
 
 
+class ToolRequest(BaseModel):
+    """Gemma asking to run one read-only tool before it answers (AGENT_TOOLS=1 only)."""
+
+    tool: str
+    args: dict = {}
+
+
 _THOUGHT = re.compile(r"<thought>.*?</thought>", re.DOTALL)
 
 
@@ -56,7 +63,17 @@ def extract_json(text: str) -> dict:
     return json.loads(text[start : end + 1])
 
 
-def build_messages(facts: dict, question: str | None, history: list[dict] | None) -> list[dict]:
+TOOL_PROMPT = """
+TOOL (optional, at most once): if the question needs recent line history (how often this defect
+type occurred lately, how those boards were handled), you may instead reply with ONLY:
+{"tool": "recent_inspections", "args": {"defect_type": "<bent|melt|scratch|missing|unknown>", "limit": <1-20>}}
+You will then get the result as "tool_result" in DECIDED FACTS and answer normally.
+If you do not need it, reply with the normal JSON."""
+
+
+def build_messages(
+    facts: dict, question: str | None, history: list[dict] | None, tools: bool = False
+) -> list[dict]:
     action = facts["action"]
     rules = f"""You explain automated PCB inspection results to a line operator standing at the
 inspection station. They read your text on a screen and must act on it within seconds.
@@ -83,7 +100,11 @@ Rules:
 
 Reply with ONLY this JSON object and no other text:
 {{"summary": "...", "recommended_action": "{action}: ...", "answer": null}}
-Set "answer" to a string only when there is an operator question."""
+Set "answer" to a string only when there is an operator question.
+If DECIDED FACTS contain "tool_result", it is recent line history from the inspection database:
+you may use its numbers when answering the question."""
+    if tools:
+        rules += TOOL_PROMPT
 
     facts_text = json.dumps(facts, indent=2)
     user_msg = (
@@ -116,5 +137,25 @@ def rewrite(facts: dict, question: str | None = None, history: list[dict] | None
         try:
             return LLMOutput(**extract_json(text))
         except (ValueError, ValidationError) as e:  # json.JSONDecodeError is a ValueError
+            last_error = e
+    raise ValueError(f"LLM reply unusable after one retry: {last_error}")
+
+
+def chat_turn(facts: dict, question: str, history: list[dict] | None = None) -> LLMOutput | ToolRequest:
+    """First call of a tool-enabled chat turn: either the normal answer or one tool request."""
+    messages = build_messages(facts, question, history, tools=True)
+    last_error: Exception | None = None
+    for _ in range(2):
+        resp = client().chat.completions.create(
+            model=config.LLM_MODEL,
+            messages=messages,
+            temperature=0,
+            max_tokens=MAX_TOKENS,
+        )
+        text = strip_thoughts(resp.choices[0].message.content or "")
+        try:
+            data = extract_json(text)
+            return ToolRequest(**data) if "tool" in data else LLMOutput(**data)
+        except (ValueError, ValidationError) as e:
             last_error = e
     raise ValueError(f"LLM reply unusable after one retry: {last_error}")
