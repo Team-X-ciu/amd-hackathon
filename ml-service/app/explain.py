@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 
-from app import checks, config, llm, manual
+from app import checks, config, llm, manual, tools
 from app.qc_rules import decide, operator_checks
 
 NAMES = {
@@ -71,6 +71,18 @@ def build_explanation(
 log = logging.getLogger("uvicorn.error")
 
 
+def agent_answer(facts: dict, question: str, history: list[dict] | None) -> llm.LLMOutput:
+    """Chat with at most one tool call. A tool result is added to `facts`, so the number check
+    accepts its figures; an unknown tool or a failed tool means answering without it."""
+    first = llm.chat_turn(facts, question, history)
+    if isinstance(first, llm.LLMOutput):
+        return first
+    result = tools.run_tool(first.tool, first.args)
+    if result is not None:
+        facts["tool_result"] = result
+    return llm.rewrite(facts, question, history)  # second call offers no tools: max 1 tool call
+
+
 def explain_with_llm(
     defect_type: str,
     severity: str,
@@ -93,7 +105,10 @@ def explain_with_llm(
         "cited_sections": [{"section": s["section"], "snippet": s["snippet"]} for s in result["sources"]],
     }
     try:
-        out = llm.rewrite(facts, question, history)
+        if question and config.AGENT_TOOLS:
+            out = agent_answer(facts, question, history)
+        else:
+            out = llm.rewrite(facts, question, history)
         found = checks.problems(out, facts)
         if found:
             log.warning(
