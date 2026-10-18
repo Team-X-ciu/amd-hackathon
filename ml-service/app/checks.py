@@ -20,18 +20,19 @@ def check_prefix(out: LLMOutput, facts: dict) -> str | None:
 
 def check_no_stop_line(out: LLMOutput, facts: dict) -> str | None:
     text = " ".join([out.summary, out.recommended_action, out.answer or ""]).lower()
-    orders_stop = ("stop the line" in text) or ( "stop line" in text)      # the second phrase from the TODO
-    if orders_stop and "qc-6.1" not in text:                            # the section ID that makes it a quote, lowercase
+    orders_stop = ("stop the line" in text) or ("stop line" in text)  # the second phrase from the TODO
+    if orders_stop and "qc-6.1" not in text:  # the section ID that makes it a quote, lowercase
         return "reply tells the operator to stop the line"
     return None
-    
+
+
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
 
 def check_numbers(out: LLMOutput, facts: dict) -> str | None:
-    allowed = set(_NUMBER.findall(str(facts)))       # every number written anywhere in the facts
+    allowed = set(_NUMBER.findall(str(facts)))  # every number written anywhere in the facts
     text = " ".join(t for t in (out.summary, out.recommended_action, out.answer or ""))
-    for num in _NUMBER.findall(text):                                  # all numbers in Gemma's text
+    for num in _NUMBER.findall(text):  # all numbers in Gemma's text
         if num not in allowed:
             return f"number {num} is not in the facts"
     return None
