@@ -6,21 +6,19 @@ It is also the fallback when Gemma fails later. The action NEVER comes from the 
 
 from __future__ import annotations
 
+import logging
 import time
 
-from app import manual
+from app import checks, config, llm, manual
 from app.qc_rules import decide, operator_checks
-import logging
-
-from app import checks, config, llm
-
 
 NAMES = {
     "bent": "Bent component lead",
     "melt": "Melted or burned area",
     "scratch": "Scratch",
-    "missing": "Missing component"
+    "missing": "Missing component",
 }
+
 
 def templated_summary(defect_type: str, severity: str, area_ratio: float | None) -> str:
     if defect_type == "unknown":
@@ -33,6 +31,7 @@ def templated_summary(defect_type: str, severity: str, area_ratio: float | None)
 
     return text + "."
 
+
 def templated_action(defect_type: str, severity: str) -> str:
     rule = decide(defect_type, severity)
     checks = operator_checks(defect_type, severity)
@@ -42,9 +41,9 @@ def templated_action(defect_type: str, severity: str) -> str:
     return f"{rule.action}: no further checks ({rule.section})."
 
 
-def build_explanation(defect_type: str, severity: str,
-                      defect_area_ratio: float | None = None,
-                      question: str | None = None) -> dict:
+def build_explanation(
+    defect_type: str, severity: str, defect_area_ratio: float | None = None, question: str | None = None
+) -> dict:
     """Templated Explanation dict matching the contract."""
     start = time.perf_counter()
     rule = decide(defect_type, severity)
@@ -56,7 +55,9 @@ def build_explanation(defect_type: str, severity: str,
         "likely_causes": manual.likely_causes(defect_type),
         "recommended_action": templated_action(defect_type, severity),
         "priority": severity,
-        "answer": None if question is None else (
+        "answer": None
+        if question is None
+        else (
             f"I can't give a checked answer to that. The decision comes from the QC manual: "
             f"{rule.action} ({rule.section}). Please ask a technician if you disagree."
         ),
@@ -66,13 +67,17 @@ def build_explanation(defect_type: str, severity: str,
         "latency_ms": int((time.perf_counter() - start) * 1000),
     }
 
+
 log = logging.getLogger("uvicorn.error")
 
 
-def explain_with_llm(defect_type: str, severity: str,
-                     defect_area_ratio: float | None = None,
-                     question: str | None = None,
-                     history: list[dict] | None = None) -> dict:
+def explain_with_llm(
+    defect_type: str,
+    severity: str,
+    defect_area_ratio: float | None = None,
+    question: str | None = None,
+    history: list[dict] | None = None,
+) -> dict:
     """Template first (always valid), then let Gemma reword it if its reply passes every check."""
     start = time.perf_counter()
     result = build_explanation(defect_type, severity, defect_area_ratio, question)
@@ -91,8 +96,11 @@ def explain_with_llm(defect_type: str, severity: str,
         out = llm.rewrite(facts, question, history)
         found = checks.problems(out, facts)
         if found:
-            log.warning("LLM reply rejected, using template: %s | Gemma's action was: %r",
-                        found, out.recommended_action[:150])
+            log.warning(
+                "LLM reply rejected, using template: %s | Gemma's action was: %r",
+                found,
+                out.recommended_action[:150],
+            )
         else:
             result.update(
                 summary=out.summary,
@@ -100,7 +108,7 @@ def explain_with_llm(defect_type: str, severity: str,
                 answer=out.answer if question else None,
                 model=config.LLM_MODEL,
             )
-    except Exception as e:                 # timeout, 401, bad JSON after retry, ...
-         log.warning("LLM failed, using template: %s: %s", type(e).__name__, e)
+    except Exception as e:  # noqa: BLE001 - any LLM failure falls back to the template
+        log.warning("LLM failed, using template: %s: %s", type(e).__name__, e)
     result["latency_ms"] = int((time.perf_counter() - start) * 1000)
     return result

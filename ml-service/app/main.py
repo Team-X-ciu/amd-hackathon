@@ -16,8 +16,8 @@ from fastapi.responses import JSONResponse
 from PIL import Image, UnidentifiedImageError
 
 from . import config, stub
-from .schemas import Error, ExplainRequest, Explanation, Health, InspectResult, ModelsLoaded
 from .explain import explain_with_llm
+from .schemas import Error, ExplainRequest, Explanation, Health, InspectResult, ModelsLoaded
 
 log = logging.getLogger("uvicorn.error")
 
@@ -93,7 +93,8 @@ def health() -> Health:
     loaded = ModelsLoaded(
         anomaly_detector=config.STUB_INSPECT or detector is not None,
         classifier=config.STUB_INSPECT or classifier is not None,
-        llm_reachable=config.STUB_EXPLAIN or config.LLM_API_KEY != "not-needed-for-vllm",  # key configured; not pinged (rate limits)
+        llm_reachable=config.STUB_EXPLAIN
+        or config.LLM_API_KEY != "not-needed-for-vllm",  # key configured; not pinged (rate limits)
     )
     status = "ok" if all(loaded.model_dump().values()) else "degraded"
     stub = config.STUB_INSPECT or config.STUB_EXPLAIN  # any fake results
@@ -142,16 +143,16 @@ def explain(req: ExplainRequest) -> Explanation:
 
     # Decision table + manual decide and cite; no LLM yet (templated). LLM wording comes later in llm.py.
     def plain(x):
-        return getattr(x, "value", x)   # generated schemas may use Enum types: Enum -> "bent"
+        return getattr(x, "value", x)  # generated schemas may use Enum types: Enum -> "bent"
 
     try:
         result = explain_with_llm(
-        plain(req.defect_type),
-        plain(req.severity),
-        defect_area_ratio=req.defect_area_ratio,
-        question=req.question,
-        history=[{"role": plain(t.role), "content": t.content} for t in (req.history or [])],
-    )
-    except ValueError as e:              # a type/severity the manual doesn't cover
+            plain(req.defect_type),
+            plain(req.severity),
+            defect_area_ratio=req.defect_area_ratio,
+            question=req.question,
+            history=[{"role": plain(t.role), "content": t.content} for t in (req.history or [])],
+        )
+    except ValueError as e:  # a type/severity the manual doesn't cover
         raise HTTPException(400, str(e))
     return Explanation(**result)

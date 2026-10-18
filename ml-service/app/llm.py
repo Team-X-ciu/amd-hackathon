@@ -14,11 +14,10 @@ import re
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
 
-from app import config
-from app import manual
+from app import config, manual
 
 TIMEOUT_S = float(os.getenv("LLM_TIMEOUT_S", "30"))
-MAX_TOKENS = 1500          # Gemma thinks first; thinking + answer must both fit
+MAX_TOKENS = 1500  # Gemma thinks first; thinking + answer must both fit
 
 _client: OpenAI | None = None
 
@@ -27,13 +26,15 @@ def client() -> OpenAI:
     global _client
     if _client is None:
         # max_retries=0: we do our own single retry below, and never wait on hidden retries
-        _client = OpenAI(base_url=config.LLM_BASE_URL, api_key=config.LLM_API_KEY,
-                         timeout=TIMEOUT_S, max_retries=0)
+        _client = OpenAI(
+            base_url=config.LLM_BASE_URL, api_key=config.LLM_API_KEY, timeout=TIMEOUT_S, max_retries=0
+        )
     return _client
 
 
 class LLMOutput(BaseModel):
     """The only fields Gemma may write."""
+
     summary: str
     recommended_action: str
     answer: str | None = None
@@ -52,7 +53,7 @@ def extract_json(text: str) -> dict:
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end <= start:
         raise ValueError("no JSON object in the reply")
-    return json.loads(text[start:end + 1])
+    return json.loads(text[start : end + 1])
 
 
 def build_messages(facts: dict, question: str | None, history: list[dict] | None) -> list[dict]:
@@ -83,7 +84,7 @@ Rules:
 Reply with ONLY this JSON object and no other text:
 {{"summary": "...", "recommended_action": "{action}: ...", "answer": null}}
 Set "answer" to a string only when there is an operator question."""
-    
+
     facts_text = json.dumps(facts, indent=2)
     user_msg = (
         f"{rules}\n\n"
@@ -91,9 +92,9 @@ Set "answer" to a string only when there is an operator question."""
         f"QC MANUAL:\n{manual.manual_text()}\n\n"
         f"OPERATOR QUESTION: {question or 'none'}"
     )
-    
+
     messages = []
-    for turn in (history or [])[-6:]:                  # last 6 turns only
+    for turn in (history or [])[-6:]:  # last 6 turns only
         role = "user" if turn["role"] == "operator" else "assistant"
         messages.append({"role": role, "content": turn["content"]})
     messages.append({"role": "user", "content": user_msg})
@@ -106,11 +107,14 @@ def rewrite(facts: dict, question: str | None = None, history: list[dict] | None
     last_error: Exception | None = None
     for _ in range(2):
         resp = client().chat.completions.create(
-            model=config.LLM_MODEL, messages=messages, temperature=0, max_tokens=MAX_TOKENS,
+            model=config.LLM_MODEL,
+            messages=messages,
+            temperature=0,
+            max_tokens=MAX_TOKENS,
         )
         text = strip_thoughts(resp.choices[0].message.content or "")
         try:
             return LLMOutput(**extract_json(text))
-        except (ValueError, ValidationError) as e:   # json.JSONDecodeError is a ValueError
+        except (ValueError, ValidationError) as e:  # json.JSONDecodeError is a ValueError
             last_error = e
     raise ValueError(f"LLM reply unusable after one retry: {last_error}")

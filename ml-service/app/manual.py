@@ -30,11 +30,10 @@ def load_sections() -> dict[str, dict[str, str]]:
             current = m.group(1)
             sections[current] = {"title": m.group(2).strip(), "lines": []}
         elif line.startswith("#"):
-            current = None                       # a heading without an ID (e.g. the title)
+            current = None  # a heading without an ID (e.g. the title)
         elif current and line.strip() != "---":  # skip horizontal rules between sections
             sections[current]["lines"].append(line)
-    return {sid: {"title": s["title"], "text": "\n".join(s["lines"]).strip()}
-            for sid, s in sections.items()}
+    return {sid: {"title": s["title"], "text": "\n".join(s["lines"]).strip()} for sid, s in sections.items()}
 
 
 def manual_text() -> str:
@@ -54,9 +53,11 @@ def _table_row(text: str, severity: str) -> str | None:
             return cells[1]
     return None
 
+
 def _plain(s: str) -> str:
     """Strip markdown for display: bold, code ticks, and leading bullet dashes."""
     return s.replace("**", "").replace("`", "").replace(" - ", " ").lstrip("- ").strip()
+
 
 def snippet(section_id: str, severity: str | None = None, max_chars: int = 300) -> str:
     """Short passage shown to the operator: the exact table row for this severity if
@@ -68,6 +69,7 @@ def snippet(section_id: str, severity: str | None = None, max_chars: int = 300) 
             return _plain(row)
     flat = _plain(" ".join(text.split()))
     return flat if len(flat) <= max_chars else flat[:max_chars].rsplit(" ", 1)[0] + "…"
+
 
 def source(section_id: str, severity: str | None = None) -> dict[str, str]:
     """One contract `Source` object."""

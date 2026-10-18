@@ -1086,6 +1086,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "openai" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "python-multipart" },
@@ -1123,6 +1124,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "langgraph", marker = "extra == 'ml'" },
     { name = "numpy", marker = "extra == 'ml'" },
+    { name = "openai", specifier = ">=3.29.0" },
     { name = "openai", marker = "extra == 'ml'" },
     { name = "opencv-python-headless", marker = "extra == 'ml'" },
     { name = "pillow", specifier = ">=10.4" },
