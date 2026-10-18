@@ -14,6 +14,7 @@ import {
   Loader2,
   RotateCcw,
   Scan,
+  Send,
   Wrench,
   X,
   XCircle,
@@ -32,6 +33,7 @@ import {
   useHealthQuery,
   useInspectionQuery,
   useDecisionMutation,
+  useChatMutation,
   useRetryExplainMutation,
 } from '@/api/queries'
 
@@ -216,6 +218,7 @@ export function InspectionDetailPage() {
         <div className="flex flex-col gap-6 lg:col-span-2">
           <AgentPanel inspection={inspection} />
           <DecisionPanel inspection={inspection} />
+          <ChatPanel inspection={inspection} />
         </div>
       </div>
     </div>
@@ -601,6 +604,98 @@ function DecisionPanel({ inspection }: { inspection: Inspection }) {
             Decision not saved: {(decisionMutation.error as Error).message}. Try again.
           </p>
         )}
+      </CardContent>
+    </Card>
+  )
+}
+
+/** Follow-up questions to the agent. History is the inspection's `chat` from the backend. */
+function ChatPanel({ inspection }: { inspection: Inspection }) {
+  const [input, setInput] = useState('')
+  const chatMutation = useChatMutation(inspection.id)
+  const canChat = inspection.explanation != null
+  const waiting = chatMutation.isPending
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault()
+    const question = input.trim()
+    if (!question || waiting) return
+    setInput('')
+    chatMutation.mutate(question)
+  }
+
+  const messages = inspection.chat ?? []
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Copilot Assistant</CardTitle>
+        <CardDescription>Ask follow-up questions about this board; answers cite the QC manual</CardDescription>
+      </CardHeader>
+      <CardContent className="gap-4">
+        {messages.length > 0 || waiting ? (
+          <ul id="chat-messages" className="flex max-h-80 flex-col gap-2 overflow-y-auto pr-1">
+            {messages.map((m, idx) => (
+              <li
+                key={`${m.created_at}-${idx}`}
+                className={cn(
+                  'max-w-[85%] rounded-lg px-3 py-2 text-sm',
+                  m.role === 'operator' ? 'self-end bg-primary text-primary-foreground' : 'self-start bg-muted',
+                )}
+              >
+                <p>{m.content}</p>
+                {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    <BookOpen className="mr-1 inline size-3" />
+                    {m.sources.map((src) => src.section).join(' · ')}
+                  </p>
+                )}
+              </li>
+            ))}
+            {waiting && (
+              <>
+                <li className="max-w-[85%] self-end rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">
+                  {chatMutation.variables}
+                </li>
+                <li aria-live="polite" className="flex items-center gap-2 self-start rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" /> Thinking… (can take up to 30 s)
+                </li>
+              </>
+            )}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {canChat ? 'Ask: “Can this board be reworked instead of rejected?”' : 'Available once the explanation is ready.'}
+          </p>
+        )}
+
+        {chatMutation.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            {(chatMutation.error as Error).message}
+          </p>
+        )}
+
+        <form className="flex gap-2" onSubmit={handleSend}>
+          <input
+            id="chat-input"
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={!canChat || waiting}
+            placeholder="Can this board be reworked instead of rejected?"
+            className="h-11 min-w-0 flex-1 rounded-lg border border-input bg-input/30 px-3.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+          />
+          <Button
+            id="chat-send"
+            type="submit"
+            size="icon-lg"
+            disabled={!canChat || waiting || !input.trim()}
+            aria-label="Send"
+            className="h-11 w-11"
+          >
+            {waiting ? <Loader2 className="animate-spin" /> : <Send />}
+          </Button>
+        </form>
       </CardContent>
     </Card>
   )
