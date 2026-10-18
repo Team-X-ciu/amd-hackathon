@@ -37,6 +37,7 @@ interface InspectionRow {
 
 /** One row of the `decisions` table. */
 interface DecisionRow {
+  inspection_id: string;
   decision: DecisionInput["decision"];
   followed_recommendation: boolean | null;
   note: string | null;
@@ -165,6 +166,72 @@ inspectionsRouter.get("/inspections/:id", async (req: Request<{ id: string }>, r
     where inspection_id = ${id} order by created_at, id`;
   res.json(toInspection(row, decision ?? null, chat));
 });
+
+const STATUSES: Inspection["status"][] = ["inspected", "explaining", "explained", "explain_failed", "decided", "failed"];
+const DEFECT_TYPES = ["bent", "melt", "scratch", "missing", "unknown"];
+
+/** A query parameter that fails the contract; message = parameter name. */
+class BadParam extends Error {}
+
+inspectionsRouter.get("/inspections", async (req: Request, res: Response) => {
+  // Express gives string | string[] | undefined; a repeated parameter is a 400 like any bad value.
+  const q = (name: string) => {
+    const v = req.query[name];
+    if (v === undefined) return null;
+    if (typeof v !== "string") throw new BadParam(name);
+    return v;
+  };
+  let status, defective, defectType, lineId, limit, cursor;
+  try {
+    status = q("status");
+    if (status !== null && !STATUSES.includes(status as Inspection["status"])) throw new BadParam("status");
+    defective = q("defective");
+    if (defective !== null && defective !== "true" && defective !== "false") throw new BadParam("defective");
+    defectType = q("defect_type");
+    if (defectType !== null && !DEFECT_TYPES.includes(defectType)) throw new BadParam("defect_type");
+    lineId = q("line_id");
+    const rawLimit = q("limit") ?? "50";
+    limit = Number(rawLimit);
+    if (!/^\d+$/.test(rawLimit) || limit < 1 || limit > 200) throw new BadParam("limit");
+    cursor = q("cursor");
+    if (cursor !== null && !UUID.test(cursor)) throw new BadParam("cursor");
+  } catch (e) {
+    if (e instanceof BadParam) return res.status(400).json({ error: `invalid ${e.message}` });
+    throw e;
+  }
+  if (cursor !== null) {
+    const [exists] = await sql`select 1 from inspections where id = ${cursor}`;
+    if (!exists) return res.status(400).json({ error: "invalid cursor" });
+  }
+
+  // Keyset paging on (created_at, id): the cursor row's values stay inside Postgres, so the
+  // microsecond timestamps are compared exactly (a JS Date would round them to ms).
+  const rows = await sql<InspectionRow[]>`
+    select * from inspections
+    where (${status}::text is null or status = ${status})
+      and (${defective}::text is null or vision->>'is_defective' = ${defective})
+      and (${defectType}::text is null or vision->>'defect_type' = ${defectType})
+      and (${lineId}::text is null or line_id = ${lineId})
+      and (${cursor}::uuid is null or (created_at, id) < (select created_at, id from inspections where id = ${cursor}))
+    order by created_at desc, id desc
+    limit ${limit + 1}`;
+  const page = rows.slice(0, limit);
+
+  const decisions = page.length
+    ? await sql<DecisionRow[]>`select * from decisions where inspection_id in ${sql(page.map((r) => r.id))}`
+    : [];
+  const byId = new Map(decisions.map((d) => [d.inspection_id, d]));
+
+  res.json({
+    // `chat` is optional in the contract and not read here, so leave it out rather than claim [].
+    items: page.map((r) => {
+      const { chat: _chat, ...item } = toInspection(r, byId.get(r.id) ?? null);
+      return item;
+    }),
+    next_cursor: rows.length > limit ? page[page.length - 1].id : null,
+  });
+});
+
 
 // Files are written once and never change, so the browser may cache them for good.
 const FILE_ROUTES = { image: "image_path", mask: "mask_path", heatmap: "heatmap_path" } as const;
