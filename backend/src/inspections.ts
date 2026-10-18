@@ -192,6 +192,46 @@ inspectionsRouter.post("/inspections/:id/explain", async (req: Request<{ id: str
   res.status(202).json(toInspection(row));
 });
 
+const DECISIONS: DecisionInput["decision"][] = ["accept", "reject", "rework"];
+
+// Operator decision (#23). The first decision fixes decided_at and time_to_decision_ms (the pitch
+// metric); deciding again updates the choice and note but keeps that first timing.
+inspectionsRouter.post("/inspections/:id/decision", async (req: Request<{ id: string }>, res: Response) => {
+  const { id } = req.params;
+  if (!UUID.test(id)) return notFound(res);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (!DECISIONS.includes(body.decision as DecisionInput["decision"])) {
+    return res.status(400).json({ error: "decision must be accept, reject or rework" });
+  }
+  for (const [field, type] of [["followed_recommendation", "boolean"], ["note", "string"], ["operator", "string"]] as const) {
+    if (body[field] !== undefined && typeof body[field] !== type) {
+      return res.status(400).json({ error: `${field} must be a ${type}` });
+    }
+  }
+
+  const saved = await sql.begin(async (tx) => {
+    const [row] = await tx<InspectionRow[]>`update inspections set status = 'decided' where id = ${id} returning *`;
+    if (!row) return null;
+    const [decision] = await tx<DecisionRow[]>`
+      insert into decisions (inspection_id, decision, followed_recommendation, note, operator, time_to_decision_ms)
+      values (${id}, ${body.decision as string}, ${(body.followed_recommendation as boolean | undefined) ?? null},
+              ${(body.note as string | undefined) ?? null}, ${(body.operator as string | undefined) ?? null},
+              (extract(epoch from now() - ${row.created_at}) * 1000)::int)
+      on conflict (inspection_id) do update set
+        decision = excluded.decision,
+        followed_recommendation = excluded.followed_recommendation,
+        note = excluded.note,
+        operator = excluded.operator
+      returning *`;
+    return { row, decision };
+  });
+  if (!saved) return notFound(res);
+  const chat = await sql<ChatRow[]>`
+    select role, content, sources, created_at from chat_messages
+    where inspection_id = ${id} order by created_at, id`;
+  res.json(toInspection(saved.row, saved.decision, chat));
+});
+
 const STATUSES: Inspection["status"][] = ["inspected", "explaining", "explained", "explain_failed", "decided", "failed"];
 const DEFECT_TYPES = ["bent", "melt", "scratch", "missing", "unknown"];
 

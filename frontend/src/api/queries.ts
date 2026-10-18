@@ -108,17 +108,16 @@ export function useDecisionMutation(inspectionId: string | undefined) {
   return useMutation({
     mutationFn: async (body: DecisionInput) => {
       if (!inspectionId) throw new Error('Missing inspection ID')
-      const { data, error } = await api.POST('/inspections/{id}/decision', {
+      const { data, error, response } = await api.POST('/inspections/{id}/decision', {
         params: { path: { id: inspectionId } },
         body,
       })
-      if (error) throw error
+      if (error || !response.ok) throw apiError(response, error)
       return data
     },
-    onSuccess: () => {
-      if (inspectionId) {
-        queryClient.invalidateQueries({ queryKey: ['inspection', inspectionId] })
-      }
+    onSuccess: (inspection) => {
+      // The answer is the updated Inspection: show the server's decision, not a guess
+      if (inspection) queryClient.setQueryData(['inspection', inspection.id], inspection)
       queryClient.invalidateQueries({ queryKey: ['inspections'] })
       queryClient.invalidateQueries({ queryKey: ['stats'] })
     },

@@ -483,17 +483,24 @@ function AgentPanel({ inspection }: { inspection: Inspection }) {
   )
 }
 
-const decisions: { value: 'accept' | 'rework' | 'reject'; label: string; icon: typeof Check; level: Level }[] = [
+type DecisionValue = 'accept' | 'rework' | 'reject'
+
+const decisions: { value: DecisionValue; label: string; icon: typeof Check; level: Level }[] = [
   { value: 'accept', label: 'Accept', icon: Check, level: 'ok' },
   { value: 'rework', label: 'Rework', icon: Wrench, level: 'review' },
   { value: 'reject', label: 'Reject', icon: X, level: 'defect' },
 ]
 
-function DecisionPanel({ inspection }: { inspection: Inspection }) {
-  const [localDecision, setLocalDecision] = useState<Inspection['decision']>(inspection.decision)
-  const decisionMutation = useDecisionMutation(inspection.id)
+/** The decision the agent's recommended action names, if it names exactly one; else undefined. */
+function recommendedDecision(inspection: Inspection): DecisionValue | undefined {
+  const text = inspection.explanation?.recommended_action ?? ''
+  const named = decisions.map((d) => d.value).filter((v) => new RegExp(`\\b${v}`, 'i').test(text))
+  return named.length === 1 ? named[0] : undefined
+}
 
-  const d = localDecision ?? inspection.decision
+function DecisionPanel({ inspection }: { inspection: Inspection }) {
+  const decisionMutation = useDecisionMutation(inspection.id)
+  const d = inspection.decision
 
   if (d) {
     const chosen = decisions.find((x) => x.value === d.decision) ?? decisions[0]
@@ -509,7 +516,8 @@ function DecisionPanel({ inspection }: { inspection: Inspection }) {
             <div>
               <div className={cn('text-lg font-semibold', s.text)}>{chosen.label}</div>
               <div className="text-sm text-muted-foreground">
-                {d.operator ?? 'Operator'} · {formatTime(d.decided_at)} · in {formatMs(d.time_to_decision_ms)}
+                {d.operator ? `${d.operator} · ` : ''}
+                {formatTime(d.decided_at)} · {formatMs(d.time_to_decision_ms)} after inspection
               </div>
             </div>
           </div>
@@ -518,20 +526,12 @@ function DecisionPanel({ inspection }: { inspection: Inspection }) {
     )
   }
 
-  const handleDecision = (value: 'accept' | 'rework' | 'reject') => {
-    const optimistic: Inspection['decision'] = {
-      decision: value,
-      followed_recommendation: true,
-      operator: 'operator-1',
-      decided_at: new Date().toISOString(),
-      time_to_decision_ms: 12_400,
-    }
-    setLocalDecision(optimistic)
-
+  // No optimistic update: the panel shows a decision only once the backend has stored it.
+  const handleDecision = (value: DecisionValue) => {
+    const recommended = recommendedDecision(inspection)
     decisionMutation.mutate({
       decision: value,
-      followed_recommendation: true,
-      operator: 'operator-1',
+      ...(recommended && { followed_recommendation: value === recommended }),
     })
   }
 
@@ -541,11 +541,12 @@ function DecisionPanel({ inspection }: { inspection: Inspection }) {
         <CardTitle className="text-lg">Operator Decision</CardTitle>
         <CardDescription>Touch or click to route board. Ready anytime.</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
         {/* Tablet-friendly large buttons (min 64-80px tall) */}
         <div className="grid grid-cols-3 gap-3">
           {decisions.map(({ value, label, icon: Icon, level }) => {
             const s = levelStyles[level]
+            const sending = decisionMutation.isPending && decisionMutation.variables?.decision === value
             return (
               <button
                 key={value}
@@ -562,12 +563,17 @@ function DecisionPanel({ inspection }: { inspection: Inspection }) {
                   s.border,
                 )}
               >
-                <Icon className="size-6" />
+                {sending ? <Loader2 className="size-6 animate-spin" /> : <Icon className="size-6" />}
                 {label}
               </button>
             )
           })}
         </div>
+        {decisionMutation.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            Decision not saved: {(decisionMutation.error as Error).message}. Try again.
+          </p>
+        )}
       </CardContent>
     </Card>
   )
