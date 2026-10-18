@@ -30,6 +30,7 @@ import { formatMs, formatPercent, formatTime, shortId } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import {
   ApiError,
+  useHealthQuery,
   useInspectionQuery,
   useDecisionMutation,
   useChatMutation,
@@ -41,6 +42,7 @@ export function InspectionDetailPage() {
   const [overlayMode, setOverlayMode] = useState<OverlayMode>('mask')
 
   const query = useInspectionQuery(id)
+  const health = useHealthQuery()
 
   if (query.isPending) return <DetailSkeleton />
 
@@ -199,7 +201,8 @@ export function InspectionDetailPage() {
                   <MetricCard
                     label="Inference Latency"
                     value={formatMs(v.latency_ms)}
-                    hint="AMD ROCm GPU"
+                    // The device the ML service reports right now (/health), not an assumed GPU
+                    hint={health.data?.ml_device ? `ML device: ${health.data.ml_device}` : 'Vision model'}
                   />
                 </dl>
               </div>
@@ -265,7 +268,7 @@ function StateBanner({
         <div>
           <h2 className="font-semibold text-base">Inspection Processing Failed</h2>
           <p className="text-zinc-300">
-            {inspection.error ?? 'Vision model failed or timed out. Check ML service ROCm connection.'}
+            {inspection.error ?? 'Vision model failed or timed out. Check that the ML service is running.'}
           </p>
         </div>
       </div>

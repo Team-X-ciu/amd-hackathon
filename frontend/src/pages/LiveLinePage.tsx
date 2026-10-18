@@ -52,11 +52,11 @@ export function LiveLinePage() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Live line</h1>
           <p className="mt-1 text-muted-foreground">
-            Conveyor stream from line 1, newest board at top.
+            Newest inspected boards at top.
             {!isPaused && (
               <span className="ml-2 inline-flex items-center gap-1 text-xs text-primary">
                 <RefreshCw className={cn('size-3', inspectionsQuery.isFetching && 'animate-spin')} />
-                Live conveyor
+                Auto-refresh
               </span>
             )}
           </p>
@@ -68,7 +68,8 @@ export function LiveLinePage() {
               <span className="text-muted-foreground">Stream paused</span>
             ) : (
               <>
-                Conveyor active · <span className="text-muted-foreground">next board in ~6s</span>
+                {/* True statement: this page polls the list; there is no line simulator yet */}
+                Auto-refresh on · <span className="text-muted-foreground">checks for new boards every 6 s</span>
               </>
             )}
           </span>
@@ -101,7 +102,7 @@ export function LiveLinePage() {
               <p className="text-destructive">Could not load boards: {(inspectionsQuery.error as Error).message}</p>
             ) : (
               <>
-                <p>No boards yet. Upload one or start the simulator.</p>
+                <p>No boards yet. Upload one to see it here.</p>
                 <Button variant="outline" nativeButton={false} render={<Link to="/upload" />}>
                   Upload a board <ArrowRight />
                 </Button>
@@ -114,7 +115,7 @@ export function LiveLinePage() {
         {/* Newest board */}
         <Card className={cn('border-l-4 lg:col-span-2 transition-all duration-300', levelStyles[levelOf(latest.vision)].border)}>
           <CardHeader>
-            <CardTitle className="text-lg">Latest board on conveyor</CardTitle>
+            <CardTitle className="text-lg">Latest board</CardTitle>
             <CardDescription className="font-mono">
               #{shortId(latest.id)} · {timeAgo(latest.created_at)}
             </CardDescription>
