@@ -80,10 +80,15 @@ export function useInspectionQuery(id: string | undefined) {
     },
     retry: retryUnlessFinal,
     enabled: Boolean(id),
-    // If the board is still being explained by the agent, poll every 2s until resolved
+    // Poll every 2 s while the agent runs. A board decided before its explanation arrived
+    // keeps polling for 2 minutes after the inspection, so the late explanation still shows.
     refetchInterval: (query) => {
-      const status = query.state.data?.status
-      return status === 'explaining' ? 2_000 : false
+      const d = query.state.data
+      if (d?.status === 'explaining') return 2_000
+      const waitingAfterDecision =
+        d?.status === 'decided' && !d.explanation && d.vision?.is_defective &&
+        Date.now() - new Date(d.created_at).getTime() < 120_000
+      return waitingAfterDecision ? 2_000 : false
     },
   })
 }
@@ -108,17 +113,16 @@ export function useDecisionMutation(inspectionId: string | undefined) {
   return useMutation({
     mutationFn: async (body: DecisionInput) => {
       if (!inspectionId) throw new Error('Missing inspection ID')
-      const { data, error } = await api.POST('/inspections/{id}/decision', {
+      const { data, error, response } = await api.POST('/inspections/{id}/decision', {
         params: { path: { id: inspectionId } },
         body,
       })
-      if (error) throw error
+      if (error || !response.ok) throw apiError(response, error)
       return data
     },
-    onSuccess: () => {
-      if (inspectionId) {
-        queryClient.invalidateQueries({ queryKey: ['inspection', inspectionId] })
-      }
+    onSuccess: (inspection) => {
+      // The answer is the updated Inspection: show the server's decision, not a guess
+      if (inspection) queryClient.setQueryData(['inspection', inspection.id], inspection)
       queryClient.invalidateQueries({ queryKey: ['inspections'] })
       queryClient.invalidateQueries({ queryKey: ['stats'] })
     },
@@ -152,16 +156,15 @@ export function useRetryExplainMutation(inspectionId: string | undefined) {
   return useMutation({
     mutationFn: async () => {
       if (!inspectionId) throw new Error('Missing inspection ID')
-      const { data, error } = await api.POST('/inspections/{id}/explain', {
+      const { data, error, response } = await api.POST('/inspections/{id}/explain', {
         params: { path: { id: inspectionId } },
       })
-      if (error) throw error
+      if (error || !response.ok) throw apiError(response, error)
       return data
     },
-    onSuccess: () => {
-      if (inspectionId) {
-        queryClient.invalidateQueries({ queryKey: ['inspection', inspectionId] })
-      }
+    onSuccess: (inspection) => {
+      // Status is now `explaining`, which turns on the detail page's polling
+      if (inspection) queryClient.setQueryData(['inspection', inspection.id], inspection)
     },
   })
 }

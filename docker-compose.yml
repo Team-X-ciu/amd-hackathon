@@ -33,6 +33,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-inspections}
       ML_SERVICE_URL: ${ML_SERVICE_URL:-http://ml-service:8000}
       ML_TIMEOUT_MS: ${ML_TIMEOUT_MS:-30000}
+      ML_EXPLAIN_TIMEOUT_MS: ${ML_EXPLAIN_TIMEOUT_MS:-90000}   # /explain calls the LLM (6-33 s)
       PORT: 3000
       OPENAPI_PATH: /contracts/backend.openapi.yaml   # for the /docs page
       UPLOAD_DIR: /app/uploads                         # images, masks, heatmaps

@@ -8,7 +8,9 @@ export type Explanation = components["schemas"]["Explanation"];
 export type MlHealth = components["schemas"]["Health"];
 
 const BASE = process.env.ML_SERVICE_URL ?? "http://localhost:8000";
-const TIMEOUT_MS = Number(process.env.ML_TIMEOUT_MS ?? 30000);
+const TIMEOUT_MS = Number(process.env.ML_TIMEOUT_MS ?? 30000); // /inspect, /health: fast path
+// /explain calls the LLM (6-33 s measured), so it gets its own, longer budget.
+const EXPLAIN_TIMEOUT_MS = Number(process.env.ML_EXPLAIN_TIMEOUT_MS ?? 90000);
 
 export class MlError extends Error {
   constructor(public status: number, message: string) {
@@ -16,14 +18,14 @@ export class MlError extends Error {
   }
 }
 
-async function call<T>(path: string, init: RequestInit): Promise<T> {
+async function call<T>(path: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Promise<T> {
   let res: globalThis.Response;
   try {
-    res = await fetch(`${BASE}${path}`, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    res = await fetch(`${BASE}${path}`, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   } catch (e) {
     // Unreachable or timed out: still an ML failure (502), not a backend bug (500).
     const timedOut = e instanceof DOMException && e.name === "TimeoutError";
-    throw new MlError(0, timedOut ? `ML service timed out after ${TIMEOUT_MS} ms` : `ML service unreachable: ${String((e as Error).cause ?? e)}`);
+    throw new MlError(0, timedOut ? `ML service timed out after ${timeoutMs} ms` : `ML service unreachable: ${String((e as Error).cause ?? e)}`);
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -48,5 +50,5 @@ export function mlExplain(req: ExplainRequest) {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(req),
-  });
+  }, EXPLAIN_TIMEOUT_MS);
 }
