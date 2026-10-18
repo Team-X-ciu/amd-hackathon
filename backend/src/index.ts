@@ -5,6 +5,7 @@ import multer from "multer";
 
 import { sql } from "./db.js";
 import { docsRouter } from "./docs.js";
+import { recoverInterrupted } from "./explain.js";
 import { inspectionsRouter } from "./inspections.js";
 import { mlHealth } from "./ml-client.js";
 
@@ -37,7 +38,6 @@ api.use(inspectionsRouter);
 
 // TODO(backend): remaining routes from the contract
 const todo = (_req: Request, res: Response) => res.status(501).json({ error: "Not implemented yet" });
-api.post("/inspections/:id/explain", todo);
 api.post("/inspections/:id/chat", todo);
 api.post("/inspections/:id/decision", todo);
 api.get("/stats", todo);
@@ -59,6 +59,8 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (status >= 500) console.error(err);
   res.status(status).json({ error: status >= 500 ? "Internal error" : String((err as Error).message), detail: String(err) });
 });
+
+await recoverInterrupted().catch((e) => console.error("could not recover interrupted explanations:", e));
 
 const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => console.log(`backend listening on :${port}`));

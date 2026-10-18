@@ -7,6 +7,7 @@ import type { JSONValue } from "postgres";
 
 import type { components } from "./api/types.js";
 import { sql } from "./db.js";
+import { startExplanation } from "./explain.js";
 import { MlError, mlInspect } from "./ml-client.js";
 import { filePath, removeFiles, saveFile, sniffImage } from "./storage.js";
 
@@ -149,6 +150,7 @@ inspectionsRouter.post("/inspections", upload.single("image"), async (req: Reque
       error: null,
     });
     res.status(201).json(toInspection(row));
+    if (row.status === "explaining") startExplanation(row.id);
   } catch (e) {
     await removeFiles(written).catch(() => {});
     res.status(500).json({ error: "Could not save the inspection", detail: String(e) });
@@ -165,6 +167,29 @@ inspectionsRouter.get("/inspections/:id", async (req: Request<{ id: string }>, r
     select role, content, sources, created_at from chat_messages
     where inspection_id = ${id} order by created_at, id`;
   res.json(toInspection(row, decision ?? null, chat));
+});
+
+// Retry (or re-run) the explanation. Answers at once; the result lands on the row like the first run.
+inspectionsRouter.post("/inspections/:id/explain", async (req: Request<{ id: string }>, res: Response) => {
+  const { id } = req.params;
+  if (!UUID.test(id)) return notFound(res);
+  // One atomic update, so two clicks can't start two runs.
+  const [row] = await sql<InspectionRow[]>`
+    update inspections set status = 'explaining', error = null
+    where id = ${id} and vision->>'is_defective' = 'true' and status not in ('explaining', 'decided')
+    returning *`;
+  if (!row) {
+    const [current] = await sql<{ status: string; defective: string | null }[]>`
+      select status, vision->>'is_defective' as defective from inspections where id = ${id}`;
+    if (!current) return notFound(res);
+    const reason =
+      current.defective !== "true" ? "the board is not defective"
+      : current.status === "explaining" ? "an explanation is already running"
+      : "the operator has already decided";
+    return res.status(409).json({ error: `Nothing to start: ${reason}` });
+  }
+  startExplanation(id);
+  res.status(202).json(toInspection(row));
 });
 
 const STATUSES: Inspection["status"][] = ["inspected", "explaining", "explained", "explain_failed", "decided", "failed"];
