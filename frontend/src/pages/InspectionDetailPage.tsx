@@ -14,7 +14,6 @@ import {
   Loader2,
   RotateCcw,
   Scan,
-  Send,
   Wrench,
   X,
   XCircle,
@@ -33,7 +32,6 @@ import {
   useHealthQuery,
   useInspectionQuery,
   useDecisionMutation,
-  useChatMutation,
   useRetryExplainMutation,
 } from '@/api/queries'
 
@@ -218,7 +216,6 @@ export function InspectionDetailPage() {
         <div className="flex flex-col gap-6 lg:col-span-2">
           <AgentPanel inspection={inspection} />
           <DecisionPanel inspection={inspection} />
-          <ChatPanel inspection={inspection} />
         </div>
       </div>
     </div>
@@ -604,89 +601,6 @@ function DecisionPanel({ inspection }: { inspection: Inspection }) {
             Decision not saved: {(decisionMutation.error as Error).message}. Try again.
           </p>
         )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function ChatPanel({ inspection }: { inspection: Inspection }) {
-  const [input, setInput] = useState('')
-  const [localChat, setLocalChat] = useState<Inspection['chat']>(inspection.chat ?? [])
-  const chatMutation = useChatMutation(inspection.id)
-
-  const messages = localChat && localChat.length > 0 ? localChat : (inspection.chat ?? [])
-  const canChat = inspection.explanation != null
-
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim() || chatMutation.isPending) return
-
-    const userMsg = {
-      role: 'operator' as const,
-      content: input.trim(),
-      created_at: new Date().toISOString(),
-    }
-    setLocalChat((prev) => [...(prev ?? []), userMsg])
-    const prompt = input.trim()
-    setInput('')
-
-    chatMutation.mutate(prompt, {
-      onSuccess: (reply) => {
-        if (reply) {
-          setLocalChat((prev) => [...(prev ?? []), reply])
-        }
-      },
-    })
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Copilot Assistant</CardTitle>
-        <CardDescription>Ask follow-up questions about this board defect</CardDescription>
-      </CardHeader>
-      <CardContent className="gap-4">
-        {messages.length > 0 ? (
-          <ul className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
-            {messages.map((m, idx) => (
-              <li
-                key={m.created_at ?? idx}
-                className={cn(
-                  'max-w-[85%] rounded-lg px-3 py-2 text-sm',
-                  m.role === 'operator' ? 'self-end bg-primary text-primary-foreground' : 'self-start bg-muted',
-                )}
-              >
-                {m.content}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {canChat ? 'Ask: “Does IPC class 2 allow rework on this trace?”' : 'Available once explanation completes.'}
-          </p>
-        )}
-
-        <form className="flex gap-2" onSubmit={handleSend}>
-          <input
-            id="chat-input"
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={!canChat || chatMutation.isPending}
-            placeholder="Ask about this defect…"
-            className="h-11 min-w-0 flex-1 rounded-lg border border-input bg-input/30 px-3.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
-          />
-          <Button
-            id="chat-send"
-            type="submit"
-            size="icon-lg"
-            disabled={!canChat || chatMutation.isPending || !input.trim()}
-            aria-label="Send"
-            className="h-11 w-11"
-          >
-            {chatMutation.isPending ? <Loader2 className="animate-spin" /> : <Send />}
-          </Button>
-        </form>
       </CardContent>
     </Card>
   )
